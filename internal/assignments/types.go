@@ -34,11 +34,6 @@ const (
 	approvalPending  = "pending"
 	approvalApproved = "approved"
 	approvalRejected = "rejected"
-
-	fieldID             = "_id"
-	fieldOrganizationID = "organizationId"
-	fieldEmployeeID     = "employeeId"
-	fieldCreatedAt      = "createdAt"
 )
 
 // JourneyAssignment is a frozen journey assigned to an employee.

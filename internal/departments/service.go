@@ -11,12 +11,12 @@ import (
 
 // Service implements department and job-role use cases.
 type Service struct {
-	store *Store
+	repo Repository
 }
 
 // NewService constructs a Service.
-func NewService(store *Store) *Service {
-	return &Service{store: store}
+func NewService(repo Repository) *Service {
+	return &Service{repo: repo}
 }
 
 // CreateDepartment creates a department for an organization.
@@ -40,7 +40,7 @@ func (s *Service) CreateDepartment(
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}
-	if err := s.store.CreateDepartment(ctx, department); err != nil {
+	if err := s.repo.CreateDepartment(ctx, department); err != nil {
 		return Department{}, fmt.Errorf("create department: %w", err)
 	}
 
@@ -53,7 +53,7 @@ func (s *Service) ListDepartments(ctx context.Context, organizationID string) ([
 		return nil, ErrInvalidInput
 	}
 
-	items, err := s.store.ListDepartments(ctx, organizationID)
+	items, err := s.repo.ListDepartments(ctx, organizationID)
 	if err != nil {
 		return nil, fmt.Errorf("list departments: %w", err)
 	}
@@ -82,7 +82,7 @@ func (s *Service) CreateJobRole(
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}
-	if err := s.store.CreateJobRole(ctx, role); err != nil {
+	if err := s.repo.CreateJobRole(ctx, role); err != nil {
 		return JobRole{}, fmt.Errorf("create job role: %w", err)
 	}
 
@@ -95,7 +95,7 @@ func (s *Service) ListJobRoles(ctx context.Context, organizationID string) ([]Jo
 		return nil, ErrInvalidInput
 	}
 
-	items, err := s.store.ListJobRoles(ctx, organizationID)
+	items, err := s.repo.ListJobRoles(ctx, organizationID)
 	if err != nil {
 		return nil, fmt.Errorf("list job roles: %w", err)
 	}
@@ -109,7 +109,7 @@ func (s *Service) EnsureDepartmentExists(ctx context.Context, organizationID, de
 		return nil
 	}
 
-	_, err := s.store.GetDepartment(ctx, organizationID, departmentID)
+	_, err := s.repo.GetDepartment(ctx, organizationID, departmentID)
 
 	return err
 }
@@ -120,7 +120,7 @@ func (s *Service) EnsureJobRoleExists(ctx context.Context, organizationID, roleI
 		return nil
 	}
 
-	_, err := s.store.GetJobRole(ctx, organizationID, roleID)
+	_, err := s.repo.GetJobRole(ctx, organizationID, roleID)
 
 	return err
 }

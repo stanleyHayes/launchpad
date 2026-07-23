@@ -1,34 +1,38 @@
-package platform
+// Package mongo is the MongoDB persistence adapter for this domain.
+package mongo
 
 import (
 	"context"
 	"errors"
 	"fmt"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	drivermongo "go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"launchpad/internal/platform"
 )
 
-// Repository persists platform staff records.
-type Repository interface {
-	GetByUserID(ctx context.Context, userID string) (Staff, error)
-	Create(ctx context.Context, staff Staff) error
-}
+const (
+	fieldUserID       = "userId"
+	staffStatusActive = "active"
+)
+
+var _ platform.Repository = (*Store)(nil)
 
 // Store is the MongoDB platform staff repository.
 type Store struct {
-	col *mongo.Collection
+	col *drivermongo.Collection
 }
 
 // NewStore constructs a Store.
-func NewStore(db *mongo.Database) *Store {
+func NewStore(db *drivermongo.Database) *Store {
 	return &Store{col: db.Collection("platform_staff")}
 }
 
 // EnsureIndexes creates platform staff indexes.
 func (s *Store) EnsureIndexes(ctx context.Context) error {
-	_, err := s.col.Indexes().CreateMany(ctx, []mongo.IndexModel{
+	_, err := s.col.Indexes().CreateMany(ctx, []drivermongo.IndexModel{
 		{Keys: bson.D{{Key: fieldUserID, Value: 1}}, Options: options.Index().SetUnique(true)},
 	})
 	if err != nil {
@@ -39,23 +43,23 @@ func (s *Store) EnsureIndexes(ctx context.Context) error {
 }
 
 // GetByUserID loads an active staff record by user id.
-func (s *Store) GetByUserID(ctx context.Context, userID string) (Staff, error) {
-	var staff Staff
+func (s *Store) GetByUserID(ctx context.Context, userID string) (platform.Staff, error) {
+	var staff platform.Staff
 
 	err := s.col.FindOne(ctx, bson.M{fieldUserID: userID, "status": staffStatusActive}).Decode(&staff)
-	if errors.Is(err, mongo.ErrNoDocuments) {
-		return Staff{}, ErrNotFound
+	if errors.Is(err, drivermongo.ErrNoDocuments) {
+		return platform.Staff{}, platform.ErrNotFound
 	}
 
 	if err != nil {
-		return Staff{}, fmt.Errorf("find platform staff: %w", err)
+		return platform.Staff{}, fmt.Errorf("find platform staff: %w", err)
 	}
 
 	return staff, nil
 }
 
 // Create inserts a staff record.
-func (s *Store) Create(ctx context.Context, staff Staff) error {
+func (s *Store) Create(ctx context.Context, staff platform.Staff) error {
 	_, err := s.col.InsertOne(ctx, staff)
 	if err != nil {
 		return fmt.Errorf("insert platform staff: %w", err)

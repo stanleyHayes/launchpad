@@ -11,12 +11,12 @@ import (
 
 // Service implements journey use cases.
 type Service struct {
-	store *Store
+	repo Repository
 }
 
 // NewService constructs a Service.
-func NewService(store *Store) *Service {
-	return &Service{store: store}
+func NewService(repo Repository) *Service {
+	return &Service{repo: repo}
 }
 
 // CreateTemplate creates a draft journey template.
@@ -43,7 +43,7 @@ func (s *Service) CreateTemplate(
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}
-	if err := s.store.CreateTemplate(ctx, template); err != nil {
+	if err := s.repo.CreateTemplate(ctx, template); err != nil {
 		return Template{}, fmt.Errorf("create journey template: %w", err)
 	}
 
@@ -56,7 +56,7 @@ func (s *Service) ListTemplates(ctx context.Context, organizationID string) ([]T
 		return nil, ErrInvalidInput
 	}
 
-	items, err := s.store.ListTemplates(ctx, organizationID)
+	items, err := s.repo.ListTemplates(ctx, organizationID)
 	if err != nil {
 		return nil, fmt.Errorf("list journey templates: %w", err)
 	}
@@ -66,7 +66,7 @@ func (s *Service) ListTemplates(ctx context.Context, organizationID string) ([]T
 
 // GetTemplate returns one template.
 func (s *Service) GetTemplate(ctx context.Context, organizationID, templateID string) (Template, error) {
-	template, err := s.store.GetTemplate(ctx, organizationID, templateID)
+	template, err := s.repo.GetTemplate(ctx, organizationID, templateID)
 	if err != nil {
 		return Template{}, fmt.Errorf("get journey template: %w", err)
 	}
@@ -80,7 +80,7 @@ func (s *Service) AddStep(
 	organizationID, templateID string,
 	in AddStepInput,
 ) (Step, error) {
-	template, err := s.store.GetTemplate(ctx, organizationID, templateID)
+	template, err := s.repo.GetTemplate(ctx, organizationID, templateID)
 	if err != nil {
 		return Step{}, fmt.Errorf("get journey template: %w", err)
 	}
@@ -96,7 +96,7 @@ func (s *Service) AddStep(
 		return Step{}, ErrInvalidInput
 	}
 
-	count, err := s.store.CountSteps(ctx, organizationID, templateID, template.CurrentVersion)
+	count, err := s.repo.CountSteps(ctx, organizationID, templateID, template.CurrentVersion)
 	if err != nil {
 		return Step{}, err
 	}
@@ -119,12 +119,12 @@ func (s *Service) AddStep(
 		Config:            config,
 		CreatedAt:         time.Now().UTC(),
 	}
-	if err := s.store.CreateStep(ctx, step); err != nil {
+	if err := s.repo.CreateStep(ctx, step); err != nil {
 		return Step{}, fmt.Errorf("create journey step: %w", err)
 	}
 
 	template.UpdatedAt = time.Now().UTC()
-	if err := s.store.UpdateTemplate(ctx, template); err != nil {
+	if err := s.repo.UpdateTemplate(ctx, template); err != nil {
 		return Step{}, fmt.Errorf("touch journey template: %w", err)
 	}
 
@@ -133,12 +133,12 @@ func (s *Service) AddStep(
 
 // ListSteps lists steps for a template's current version.
 func (s *Service) ListSteps(ctx context.Context, organizationID, templateID string) ([]Step, error) {
-	template, err := s.store.GetTemplate(ctx, organizationID, templateID)
+	template, err := s.repo.GetTemplate(ctx, organizationID, templateID)
 	if err != nil {
 		return nil, fmt.Errorf("get journey template: %w", err)
 	}
 
-	items, err := s.store.ListSteps(ctx, organizationID, templateID, template.CurrentVersion)
+	items, err := s.repo.ListSteps(ctx, organizationID, templateID, template.CurrentVersion)
 	if err != nil {
 		return nil, fmt.Errorf("list journey steps: %w", err)
 	}
@@ -152,7 +152,7 @@ func (s *Service) ListStepsForVersion(
 	organizationID, templateID string,
 	version int,
 ) ([]Step, error) {
-	items, err := s.store.ListSteps(ctx, organizationID, templateID, version)
+	items, err := s.repo.ListSteps(ctx, organizationID, templateID, version)
 	if err != nil {
 		return nil, fmt.Errorf("list journey steps for version: %w", err)
 	}
@@ -162,7 +162,7 @@ func (s *Service) ListStepsForVersion(
 
 // Publish marks a draft journey as published.
 func (s *Service) Publish(ctx context.Context, organizationID, templateID string) (Template, error) {
-	template, err := s.store.GetTemplate(ctx, organizationID, templateID)
+	template, err := s.repo.GetTemplate(ctx, organizationID, templateID)
 	if err != nil {
 		return Template{}, fmt.Errorf("get journey template: %w", err)
 	}
@@ -171,7 +171,7 @@ func (s *Service) Publish(ctx context.Context, organizationID, templateID string
 		return Template{}, ErrNotDraft
 	}
 
-	count, err := s.store.CountSteps(ctx, organizationID, templateID, template.CurrentVersion)
+	count, err := s.repo.CountSteps(ctx, organizationID, templateID, template.CurrentVersion)
 	if err != nil {
 		return Template{}, err
 	}
@@ -183,7 +183,7 @@ func (s *Service) Publish(ctx context.Context, organizationID, templateID string
 	template.Status = statusPublished
 
 	template.UpdatedAt = time.Now().UTC()
-	if err := s.store.UpdateTemplate(ctx, template); err != nil {
+	if err := s.repo.UpdateTemplate(ctx, template); err != nil {
 		return Template{}, fmt.Errorf("publish journey template: %w", err)
 	}
 
@@ -192,7 +192,7 @@ func (s *Service) Publish(ctx context.Context, organizationID, templateID string
 
 // RequirePublished returns a published template.
 func (s *Service) RequirePublished(ctx context.Context, organizationID, templateID string) (Template, error) {
-	template, err := s.store.GetTemplate(ctx, organizationID, templateID)
+	template, err := s.repo.GetTemplate(ctx, organizationID, templateID)
 	if err != nil {
 		return Template{}, fmt.Errorf("get journey template: %w", err)
 	}

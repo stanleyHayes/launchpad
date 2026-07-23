@@ -13,13 +13,6 @@ var (
 	ErrInvalidInput = errors.New("invalid notification input")
 )
 
-const (
-	fieldOrganizationID = "organizationId"
-	fieldUserID         = "userId"
-	fieldCreatedAt      = "createdAt"
-	defaultListLimit    = int64(50)
-)
-
 // Notification is an in-app notification.
 type Notification struct {
 	ID             string     `bson:"_id"              json:"id"`

@@ -1,23 +1,36 @@
-package journeys
+// Package mongo is the MongoDB persistence adapter for this domain.
+package mongo
 
 import (
 	"context"
 	"errors"
 	"fmt"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	drivermongo "go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"launchpad/internal/journeys"
 )
+
+const (
+	fieldOrganizationID = "organizationId"
+	fieldCreatedAt      = "createdAt"
+	fieldTemplateID     = "journeyTemplateId"
+	fieldVersion        = "version"
+	fieldPosition       = "position"
+)
+
+var _ journeys.Repository = (*Store)(nil)
 
 // Store persists journey templates and steps.
 type Store struct {
-	templates *mongo.Collection
-	steps     *mongo.Collection
+	templates *drivermongo.Collection
+	steps     *drivermongo.Collection
 }
 
 // NewStore constructs a Store.
-func NewStore(db *mongo.Database) *Store {
+func NewStore(db *drivermongo.Database) *Store {
 	return &Store{
 		templates: db.Collection("journey_templates"),
 		steps:     db.Collection("journey_steps"),
@@ -26,7 +39,7 @@ func NewStore(db *mongo.Database) *Store {
 
 // EnsureIndexes creates journey indexes.
 func (s *Store) EnsureIndexes(ctx context.Context) error {
-	_, err := s.templates.Indexes().CreateMany(ctx, []mongo.IndexModel{
+	_, err := s.templates.Indexes().CreateMany(ctx, []drivermongo.IndexModel{
 		{Keys: bson.D{{Key: fieldOrganizationID, Value: 1}, {Key: "status", Value: 1}}},
 		{Keys: bson.D{{Key: fieldOrganizationID, Value: 1}, {Key: fieldCreatedAt, Value: -1}}},
 	})
@@ -34,7 +47,7 @@ func (s *Store) EnsureIndexes(ctx context.Context) error {
 		return fmt.Errorf("ensure journey template indexes: %w", err)
 	}
 
-	_, err = s.steps.Indexes().CreateMany(ctx, []mongo.IndexModel{
+	_, err = s.steps.Indexes().CreateMany(ctx, []drivermongo.IndexModel{
 		{
 			Keys: bson.D{
 				{Key: fieldOrganizationID, Value: 1},
@@ -52,7 +65,7 @@ func (s *Store) EnsureIndexes(ctx context.Context) error {
 }
 
 // CreateTemplate inserts a journey template.
-func (s *Store) CreateTemplate(ctx context.Context, template Template) error {
+func (s *Store) CreateTemplate(ctx context.Context, template journeys.Template) error {
 	_, err := s.templates.InsertOne(ctx, template)
 	if err != nil {
 		return fmt.Errorf("insert journey template: %w", err)
@@ -62,26 +75,26 @@ func (s *Store) CreateTemplate(ctx context.Context, template Template) error {
 }
 
 // GetTemplate returns a template scoped to an organization.
-func (s *Store) GetTemplate(ctx context.Context, organizationID, templateID string) (Template, error) {
-	var template Template
+func (s *Store) GetTemplate(ctx context.Context, organizationID, templateID string) (journeys.Template, error) {
+	var template journeys.Template
 
 	err := s.templates.FindOne(ctx, bson.M{
 		"_id":               templateID,
 		fieldOrganizationID: organizationID,
 	}).Decode(&template)
-	if errors.Is(err, mongo.ErrNoDocuments) {
-		return Template{}, ErrNotFound
+	if errors.Is(err, drivermongo.ErrNoDocuments) {
+		return journeys.Template{}, journeys.ErrNotFound
 	}
 
 	if err != nil {
-		return Template{}, fmt.Errorf("find journey template: %w", err)
+		return journeys.Template{}, fmt.Errorf("find journey template: %w", err)
 	}
 
 	return template, nil
 }
 
 // ListTemplates lists templates for an organization.
-func (s *Store) ListTemplates(ctx context.Context, organizationID string) ([]Template, error) {
+func (s *Store) ListTemplates(ctx context.Context, organizationID string) ([]journeys.Template, error) {
 	cursor, err := s.templates.Find(
 		ctx,
 		bson.M{fieldOrganizationID: organizationID},
@@ -91,7 +104,7 @@ func (s *Store) ListTemplates(ctx context.Context, organizationID string) ([]Tem
 		return nil, fmt.Errorf("find journey templates: %w", err)
 	}
 
-	items := make([]Template, 0)
+	items := make([]journeys.Template, 0)
 	decodeErr := cursor.All(ctx, &items)
 	closeErr := cursor.Close(ctx)
 
@@ -99,7 +112,7 @@ func (s *Store) ListTemplates(ctx context.Context, organizationID string) ([]Tem
 }
 
 // UpdateTemplate replaces a template document.
-func (s *Store) UpdateTemplate(ctx context.Context, template Template) error {
+func (s *Store) UpdateTemplate(ctx context.Context, template journeys.Template) error {
 	res, err := s.templates.ReplaceOne(ctx, bson.M{
 		"_id":               template.ID,
 		fieldOrganizationID: template.OrganizationID,
@@ -109,14 +122,14 @@ func (s *Store) UpdateTemplate(ctx context.Context, template Template) error {
 	}
 
 	if res.MatchedCount == 0 {
-		return ErrNotFound
+		return journeys.ErrNotFound
 	}
 
 	return nil
 }
 
 // CreateStep inserts a journey step.
-func (s *Store) CreateStep(ctx context.Context, step Step) error {
+func (s *Store) CreateStep(ctx context.Context, step journeys.Step) error {
 	_, err := s.steps.InsertOne(ctx, step)
 	if err != nil {
 		return fmt.Errorf("insert journey step: %w", err)
@@ -130,7 +143,7 @@ func (s *Store) ListSteps(
 	ctx context.Context,
 	organizationID, templateID string,
 	version int,
-) ([]Step, error) {
+) ([]journeys.Step, error) {
 	cursor, err := s.steps.Find(
 		ctx,
 		bson.M{
@@ -144,7 +157,7 @@ func (s *Store) ListSteps(
 		return nil, fmt.Errorf("find journey steps: %w", err)
 	}
 
-	items := make([]Step, 0)
+	items := make([]journeys.Step, 0)
 	decodeErr := cursor.All(ctx, &items)
 	closeErr := cursor.Close(ctx)
 

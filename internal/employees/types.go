@@ -20,15 +20,8 @@ var (
 )
 
 const (
-	statusInvited             = "invited"
-	statusActive              = "active"
-	fieldID                   = "_id"
-	fieldOrganizationID       = "organizationId"
-	fieldUserID               = "userId"
-	fieldWorkEmail            = "workEmail"
-	fieldCreatedAt            = "createdAt"
-	defaultListLimit    int64 = 50
-	maxListLimit        int64 = 100
+	statusInvited = "invited"
+	statusActive  = "active"
 )
 
 // Employee is a tenant-scoped employee record.

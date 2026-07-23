@@ -16,7 +16,6 @@ const (
 	rolePlatformOwner = "platform_owner"
 	rolePlatformAdmin = "platform_admin"
 	staffStatusActive = "active"
-	fieldUserID       = "userId"
 )
 
 // Staff is a platform operator account.

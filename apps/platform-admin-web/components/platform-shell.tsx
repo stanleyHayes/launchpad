@@ -23,6 +23,7 @@ export const platformNav: NavGroup[] = [
       { label: "Feature flags", href: "/feature-flags" },
       { label: "Billing", href: "/billing" },
       { label: "Support", href: "/support" },
+      { label: "CMS", href: "/cms" },
     ],
   },
 ];

@@ -30,12 +30,6 @@ const (
 	stepTypeQuiz     = "quiz"
 	stepTypeTask     = "task"
 	stepTypeApproval = "approval"
-
-	fieldOrganizationID = "organizationId"
-	fieldCreatedAt      = "createdAt"
-	fieldTemplateID     = "journeyTemplateId"
-	fieldVersion        = "version"
-	fieldPosition       = "position"
 )
 
 // Template is a versioned onboarding journey definition.

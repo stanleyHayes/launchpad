@@ -1,23 +1,34 @@
-package departments
+// Package mongo is the MongoDB persistence adapter for this domain.
+package mongo
 
 import (
 	"context"
 	"errors"
 	"fmt"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	drivermongo "go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"launchpad/internal/departments"
 )
+
+const (
+	fieldOrganizationID = "organizationId"
+	fieldName           = "name"
+	fieldCreatedAt      = "createdAt"
+)
+
+var _ departments.Repository = (*Store)(nil)
 
 // Store is the MongoDB repository for departments and job roles.
 type Store struct {
-	departments *mongo.Collection
-	jobRoles    *mongo.Collection
+	departments *drivermongo.Collection
+	jobRoles    *drivermongo.Collection
 }
 
 // NewStore constructs a Store.
-func NewStore(db *mongo.Database) *Store {
+func NewStore(db *drivermongo.Database) *Store {
 	return &Store{
 		departments: db.Collection("departments"),
 		jobRoles:    db.Collection("job_roles"),
@@ -26,7 +37,7 @@ func NewStore(db *mongo.Database) *Store {
 
 // EnsureIndexes creates department and job-role indexes.
 func (s *Store) EnsureIndexes(ctx context.Context) error {
-	_, err := s.departments.Indexes().CreateMany(ctx, []mongo.IndexModel{
+	_, err := s.departments.Indexes().CreateMany(ctx, []drivermongo.IndexModel{
 		{
 			Keys: bson.D{
 				{Key: fieldOrganizationID, Value: 1},
@@ -40,7 +51,7 @@ func (s *Store) EnsureIndexes(ctx context.Context) error {
 		return fmt.Errorf("ensure department indexes: %w", err)
 	}
 
-	_, err = s.jobRoles.Indexes().CreateMany(ctx, []mongo.IndexModel{
+	_, err = s.jobRoles.Indexes().CreateMany(ctx, []drivermongo.IndexModel{
 		{
 			Keys: bson.D{
 				{Key: fieldOrganizationID, Value: 1},
@@ -58,10 +69,10 @@ func (s *Store) EnsureIndexes(ctx context.Context) error {
 }
 
 // CreateDepartment inserts a department.
-func (s *Store) CreateDepartment(ctx context.Context, department Department) error {
+func (s *Store) CreateDepartment(ctx context.Context, department departments.Department) error {
 	_, err := s.departments.InsertOne(ctx, department)
-	if mongo.IsDuplicateKeyError(err) {
-		return ErrNameTaken
+	if drivermongo.IsDuplicateKeyError(err) {
+		return departments.ErrNameTaken
 	}
 
 	if err != nil {
@@ -72,7 +83,7 @@ func (s *Store) CreateDepartment(ctx context.Context, department Department) err
 }
 
 // ListDepartments lists departments for an organization.
-func (s *Store) ListDepartments(ctx context.Context, organizationID string) ([]Department, error) {
+func (s *Store) ListDepartments(ctx context.Context, organizationID string) ([]departments.Department, error) {
 	cursor, err := s.departments.Find(
 		ctx,
 		bson.M{fieldOrganizationID: organizationID},
@@ -82,7 +93,7 @@ func (s *Store) ListDepartments(ctx context.Context, organizationID string) ([]D
 		return nil, fmt.Errorf("find departments: %w", err)
 	}
 
-	items := make([]Department, 0)
+	items := make([]departments.Department, 0)
 	decodeErr := cursor.All(ctx, &items)
 	closeErr := cursor.Close(ctx)
 
@@ -94,29 +105,32 @@ func (s *Store) ListDepartments(ctx context.Context, organizationID string) ([]D
 }
 
 // GetDepartment returns a department scoped to an organization.
-func (s *Store) GetDepartment(ctx context.Context, organizationID, departmentID string) (Department, error) {
-	var department Department
+func (s *Store) GetDepartment(
+	ctx context.Context,
+	organizationID, departmentID string,
+) (departments.Department, error) {
+	var department departments.Department
 
 	err := s.departments.FindOne(ctx, bson.M{
 		"_id":               departmentID,
 		fieldOrganizationID: organizationID,
 	}).Decode(&department)
-	if errors.Is(err, mongo.ErrNoDocuments) {
-		return Department{}, ErrNotFound
+	if errors.Is(err, drivermongo.ErrNoDocuments) {
+		return departments.Department{}, departments.ErrNotFound
 	}
 
 	if err != nil {
-		return Department{}, fmt.Errorf("find department: %w", err)
+		return departments.Department{}, fmt.Errorf("find department: %w", err)
 	}
 
 	return department, nil
 }
 
 // CreateJobRole inserts a job role.
-func (s *Store) CreateJobRole(ctx context.Context, role JobRole) error {
+func (s *Store) CreateJobRole(ctx context.Context, role departments.JobRole) error {
 	_, err := s.jobRoles.InsertOne(ctx, role)
-	if mongo.IsDuplicateKeyError(err) {
-		return ErrRoleNameTaken
+	if drivermongo.IsDuplicateKeyError(err) {
+		return departments.ErrRoleNameTaken
 	}
 
 	if err != nil {
@@ -127,7 +141,7 @@ func (s *Store) CreateJobRole(ctx context.Context, role JobRole) error {
 }
 
 // ListJobRoles lists job roles for an organization.
-func (s *Store) ListJobRoles(ctx context.Context, organizationID string) ([]JobRole, error) {
+func (s *Store) ListJobRoles(ctx context.Context, organizationID string) ([]departments.JobRole, error) {
 	cursor, err := s.jobRoles.Find(
 		ctx,
 		bson.M{fieldOrganizationID: organizationID},
@@ -137,7 +151,7 @@ func (s *Store) ListJobRoles(ctx context.Context, organizationID string) ([]JobR
 		return nil, fmt.Errorf("find job roles: %w", err)
 	}
 
-	items := make([]JobRole, 0)
+	items := make([]departments.JobRole, 0)
 	decodeErr := cursor.All(ctx, &items)
 	closeErr := cursor.Close(ctx)
 
@@ -149,19 +163,19 @@ func (s *Store) ListJobRoles(ctx context.Context, organizationID string) ([]JobR
 }
 
 // GetJobRole returns a job role scoped to an organization.
-func (s *Store) GetJobRole(ctx context.Context, organizationID, roleID string) (JobRole, error) {
-	var role JobRole
+func (s *Store) GetJobRole(ctx context.Context, organizationID, roleID string) (departments.JobRole, error) {
+	var role departments.JobRole
 
 	err := s.jobRoles.FindOne(ctx, bson.M{
 		"_id":               roleID,
 		fieldOrganizationID: organizationID,
 	}).Decode(&role)
-	if errors.Is(err, mongo.ErrNoDocuments) {
-		return JobRole{}, ErrRoleNotFound
+	if errors.Is(err, drivermongo.ErrNoDocuments) {
+		return departments.JobRole{}, departments.ErrRoleNotFound
 	}
 
 	if err != nil {
-		return JobRole{}, fmt.Errorf("find job role: %w", err)
+		return departments.JobRole{}, fmt.Errorf("find job role: %w", err)
 	}
 
 	return role, nil

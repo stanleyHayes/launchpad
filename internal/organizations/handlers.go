@@ -191,9 +191,9 @@ func (h *Handler) HandleInviteMember(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeOrgJSON(w, r, http.StatusCreated, map[string]any{
-		"userId":            userID,
-		fieldOrganizationID: principal.OrganizationID,
-		"roleCode":          body.RoleCode,
+		"userId":         userID,
+		"organizationId": principal.OrganizationID,
+		"roleCode":       body.RoleCode,
 	})
 }
 

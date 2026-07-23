@@ -20,13 +20,13 @@ type ReferenceChecker interface {
 
 // Service implements employee use cases.
 type Service struct {
-	store      *Store
+	repo       Repository
 	references ReferenceChecker
 }
 
 // NewService constructs a Service.
-func NewService(store *Store, references ReferenceChecker) *Service {
-	return &Service{store: store, references: references}
+func NewService(repo Repository, references ReferenceChecker) *Service {
+	return &Service{repo: repo, references: references}
 }
 
 // Create creates an invited employee.
@@ -65,7 +65,7 @@ func (s *Service) Create(ctx context.Context, organizationID string, in CreateIn
 		CreatedAt:         now,
 		UpdatedAt:         now,
 	}
-	if err := s.store.Create(ctx, employee); err != nil {
+	if err := s.repo.Create(ctx, employee); err != nil {
 		return Employee{}, fmt.Errorf("create employee: %w", err)
 	}
 
@@ -78,7 +78,7 @@ func (s *Service) List(ctx context.Context, organizationID string, limit int64) 
 		return nil, ErrInvalidInput
 	}
 
-	items, err := s.store.List(ctx, organizationID, limit)
+	items, err := s.repo.List(ctx, organizationID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list employees: %w", err)
 	}
@@ -92,7 +92,7 @@ func (s *Service) Get(ctx context.Context, organizationID, employeeID string) (E
 		return Employee{}, ErrInvalidInput
 	}
 
-	employee, err := s.store.GetByID(ctx, organizationID, employeeID)
+	employee, err := s.repo.GetByID(ctx, organizationID, employeeID)
 	if err != nil {
 		return Employee{}, fmt.Errorf("get employee: %w", err)
 	}
@@ -106,7 +106,7 @@ func (s *Service) GetByUserID(ctx context.Context, organizationID, userID string
 		return Employee{}, ErrInvalidInput
 	}
 
-	employee, err := s.store.GetByUserID(ctx, organizationID, userID)
+	employee, err := s.repo.GetByUserID(ctx, organizationID, userID)
 	if err != nil {
 		return Employee{}, fmt.Errorf("get employee by user: %w", err)
 	}
@@ -120,7 +120,7 @@ func (s *Service) ProvisionAccess(ctx context.Context, organizationID, employeeI
 		return ErrInvalidInput
 	}
 
-	if err := s.store.ProvisionAccess(ctx, organizationID, employeeID, userID); err != nil {
+	if err := s.repo.ProvisionAccess(ctx, organizationID, employeeID, userID); err != nil {
 		return fmt.Errorf("provision employee access: %w", err)
 	}
 
@@ -133,7 +133,7 @@ func (s *Service) Update(
 	organizationID, employeeID string,
 	in UpdateInput,
 ) (Employee, error) {
-	employee, err := s.store.GetByID(ctx, organizationID, employeeID)
+	employee, err := s.repo.GetByID(ctx, organizationID, employeeID)
 	if err != nil {
 		return Employee{}, fmt.Errorf("get employee for update: %w", err)
 	}
@@ -153,7 +153,7 @@ func (s *Service) Update(
 	}
 
 	employee.UpdatedAt = time.Now().UTC()
-	if err := s.store.Update(ctx, employee); err != nil {
+	if err := s.repo.Update(ctx, employee); err != nil {
 		return Employee{}, fmt.Errorf("update employee: %w", err)
 	}
 
@@ -209,7 +209,7 @@ func applyEmployeeUpdate(employee *Employee, in UpdateInput) error {
 
 // LinkUser attaches a user account to an invited employee.
 func (s *Service) LinkUser(ctx context.Context, organizationID, employeeID, userID string) (Employee, error) {
-	employee, err := s.store.GetByID(ctx, organizationID, employeeID)
+	employee, err := s.repo.GetByID(ctx, organizationID, employeeID)
 	if err != nil {
 		return Employee{}, fmt.Errorf("get employee for link: %w", err)
 	}
@@ -222,7 +222,7 @@ func (s *Service) LinkUser(ctx context.Context, organizationID, employeeID, user
 	employee.Status = statusActive
 
 	employee.UpdatedAt = time.Now().UTC()
-	if err := s.store.Update(ctx, employee); err != nil {
+	if err := s.repo.Update(ctx, employee); err != nil {
 		return Employee{}, fmt.Errorf("link employee user: %w", err)
 	}
 
@@ -253,7 +253,7 @@ func (s *Service) validateReferences(
 		return nil
 	}
 
-	_, err := s.store.GetByID(ctx, organizationID, managerEmployeeID)
+	_, err := s.repo.GetByID(ctx, organizationID, managerEmployeeID)
 	if errors.Is(err, ErrNotFound) {
 		return ErrInvalidReference
 	}

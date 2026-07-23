@@ -15,12 +15,6 @@ var (
 )
 
 const (
-	fieldID             = "_id"
-	fieldOrganizationID = "organizationId"
-	fieldCode           = "code"
-	fieldActive         = "active"
-	fieldCreatedAt      = "createdAt"
-
 	planStarter    = "starter"
 	planGrowth     = "growth"
 	planEnterprise = "enterprise"

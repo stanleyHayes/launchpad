@@ -1,4 +1,5 @@
-package auth
+// Package redis is the Redis persistence adapter for auth sessions.
+package redis
 
 import (
 	"context"
@@ -7,17 +8,23 @@ import (
 	"strings"
 	"time"
 
-	"github.com/redis/go-redis/v9"
+	goredis "github.com/redis/go-redis/v9"
+
+	"launchpad/internal/auth"
 )
+
+const sessionPayloadPartsExpected = 3
+
+var _ auth.SessionRepository = (*SessionStore)(nil)
 
 // SessionStore persists refresh sessions in Redis.
 type SessionStore struct {
-	rdb *redis.Client
+	rdb *goredis.Client
 	ttl time.Duration
 }
 
 // NewSessionStore constructs a SessionStore.
-func NewSessionStore(rdb *redis.Client, ttl time.Duration) *SessionStore {
+func NewSessionStore(rdb *goredis.Client, ttl time.Duration) *SessionStore {
 	return &SessionStore{rdb: rdb, ttl: ttl}
 }
 
@@ -34,8 +41,8 @@ func (s *SessionStore) Save(ctx context.Context, sessionID, userID, orgID, refre
 // Get loads a session payload.
 func (s *SessionStore) Get(ctx context.Context, sessionID string) (string, string, string, error) {
 	val, getErr := s.rdb.Get(ctx, s.key(sessionID)).Result()
-	if errors.Is(getErr, redis.Nil) {
-		return "", "", "", ErrSessionInvalid
+	if errors.Is(getErr, goredis.Nil) {
+		return "", "", "", auth.ErrSessionInvalid
 	}
 
 	if getErr != nil {
@@ -44,7 +51,7 @@ func (s *SessionStore) Get(ctx context.Context, sessionID string) (string, strin
 
 	parts := strings.Split(val, "|")
 	if len(parts) != sessionPayloadPartsExpected {
-		return "", "", "", ErrSessionInvalid
+		return "", "", "", auth.ErrSessionInvalid
 	}
 
 	return parts[0], parts[1], parts[2], nil

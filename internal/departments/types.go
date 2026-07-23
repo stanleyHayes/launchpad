@@ -19,12 +19,6 @@ var (
 	ErrRoleNameTaken = errors.New("job role name already taken")
 )
 
-const (
-	fieldOrganizationID = "organizationId"
-	fieldName           = "name"
-	fieldCreatedAt      = "createdAt"
-)
-
 // Department is an organization department.
 type Department struct {
 	ID             string    `bson:"_id"            json:"id"`

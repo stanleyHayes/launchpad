@@ -1,3 +1,14 @@
 packages:
   - "apps/*-web"
   - "packages/*"
+
+allowBuilds:
+  sharp: true
+  unrs-resolver: true
+
+# Next 16 does not support TypeScript 7 yet (misdetects and crashes).
+# eslint-config-next still targets ESLint 9.
+overrides:
+  typescript: "5.9.3"
+  eslint: "9.39.5"
+  "@eslint/js": "9.39.5"

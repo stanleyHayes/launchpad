@@ -11,12 +11,12 @@ import (
 
 // Service implements notification use cases.
 type Service struct {
-	store *Store
+	repo Repository
 }
 
 // NewService constructs a Service.
-func NewService(store *Store) *Service {
-	return &Service{store: store}
+func NewService(repo Repository) *Service {
+	return &Service{repo: repo}
 }
 
 // Create creates a notification.
@@ -38,7 +38,7 @@ func (s *Service) Create(ctx context.Context, organizationID string, in CreateIn
 		ReadAt:         nil,
 		CreatedAt:      time.Now().UTC(),
 	}
-	if err := s.store.Create(ctx, notification); err != nil {
+	if err := s.repo.Create(ctx, notification); err != nil {
 		return Notification{}, fmt.Errorf("create notification: %w", err)
 	}
 
@@ -51,7 +51,7 @@ func (s *Service) ListForUser(ctx context.Context, organizationID, userID string
 		return nil, ErrInvalidInput
 	}
 
-	items, err := s.store.ListForUser(ctx, organizationID, userID)
+	items, err := s.repo.ListForUser(ctx, organizationID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("list notifications: %w", err)
 	}
@@ -65,7 +65,7 @@ func (s *Service) MarkRead(ctx context.Context, organizationID, userID, notifica
 		return Notification{}, ErrInvalidInput
 	}
 
-	notification, err := s.store.Get(ctx, organizationID, userID, notificationID)
+	notification, err := s.repo.Get(ctx, organizationID, userID, notificationID)
 	if err != nil {
 		return Notification{}, fmt.Errorf("get notification: %w", err)
 	}
@@ -73,7 +73,7 @@ func (s *Service) MarkRead(ctx context.Context, organizationID, userID, notifica
 	now := time.Now().UTC()
 
 	notification.ReadAt = &now
-	if err := s.store.Update(ctx, notification); err != nil {
+	if err := s.repo.Update(ctx, notification); err != nil {
 		return Notification{}, fmt.Errorf("mark notification read: %w", err)
 	}
 

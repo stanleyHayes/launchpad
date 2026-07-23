@@ -6,12 +6,21 @@ Enterprise employee onboarding platform (multi-tenant SaaS).
 
 | Layer | Choice |
 | --- | --- |
-| API | Go modular monolith |
-| Datastore | MongoDB |
+| API | Go modular monolith (hexagonal ports/adapters) |
+| Datastore | MongoDB (swap-ready behind repository ports) |
 | Cache / sessions | Redis |
 | Auth | Custom Go (email/password, JWT + Redis sessions) |
 | Frontends | Next.js + TypeScript + Tailwind |
 | Monorepo | pnpm workspaces + Go modules |
+
+## Backend architecture
+
+Domain packages under `internal/<domain>` own types, use cases, HTTP handlers, and **repository ports** (`Repository` / `UserRepository` / `SessionRepository`). Persistence drivers live in adapters:
+
+- `internal/<domain>/mongo` — MongoDB adapters implementing domain ports
+- `internal/auth/redis` — Redis session adapter
+
+`internal/app` is the composition root: it constructs adapters and injects them into services. To switch MongoDB for Postgres later, add `internal/<domain>/postgres` implementations of the same ports and change wiring in `app` — handlers and services stay unchanged.
 
 ## Product surfaces
 
@@ -50,6 +59,6 @@ docker compose up --build
 ## Current delivery
 
 - **Phase 0–1:** auth, orgs, departments/roles, employees, journeys, assignments, approvals, notifications, org-admin + employee portals
-- **Phase 2 (in progress):** platform staff, tenant ops, leads, billing plans/subscriptions, feature flags, support tickets, platform + org admin consoles
+- **Phase 2 (in progress):** platform staff, tenant ops, leads, billing, feature flags, support tickets, CMS, analytics, platform + org admin consoles
 
 See [LaunchPad_Complete_PRD_and_Build_Spec.md](./LaunchPad_Complete_PRD_and_Build_Spec.md), [CLAUDE.md](./CLAUDE.md), and [AGENTS.md](./AGENTS.md).

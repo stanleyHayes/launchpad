@@ -23,11 +23,10 @@ var (
 )
 
 const (
-	userStatusActive            = "active"
-	roleOrganizationOwner       = "organization_owner"
-	tokenTypeBearer             = "Bearer"
-	refreshTokenPartsExpected   = 2
-	sessionPayloadPartsExpected = 3
+	userStatusActive          = "active"
+	roleOrganizationOwner     = "organization_owner"
+	tokenTypeBearer           = "Bearer"
+	refreshTokenPartsExpected = 2
 )
 
 // User is an authenticated platform user.

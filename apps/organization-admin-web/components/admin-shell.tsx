@@ -13,6 +13,7 @@ export const orgAdminNav: NavGroup[] = [
     heading: "Operations",
     items: [
       { label: "Overview", href: "/dashboard" },
+      { label: "Analytics", href: "/analytics" },
       { label: "Journeys", href: "/journeys" },
       { label: "Approvals", href: "/approvals" },
     ],

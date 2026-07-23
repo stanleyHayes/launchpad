@@ -1,28 +1,43 @@
-package employees
+// Package mongo is the MongoDB persistence adapter for this domain.
+package mongo
 
 import (
 	"context"
 	"errors"
 	"fmt"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	drivermongo "go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"launchpad/internal/employees"
 )
+
+const (
+	fieldID                   = "_id"
+	fieldOrganizationID       = "organizationId"
+	fieldUserID               = "userId"
+	fieldWorkEmail            = "workEmail"
+	fieldCreatedAt            = "createdAt"
+	defaultListLimit    int64 = 50
+	maxListLimit        int64 = 100
+)
+
+var _ employees.Repository = (*Store)(nil)
 
 // Store is the MongoDB employee repository.
 type Store struct {
-	col *mongo.Collection
+	col *drivermongo.Collection
 }
 
 // NewStore constructs a Store.
-func NewStore(db *mongo.Database) *Store {
+func NewStore(db *drivermongo.Database) *Store {
 	return &Store{col: db.Collection("employees")}
 }
 
 // EnsureIndexes creates employee indexes.
 func (s *Store) EnsureIndexes(ctx context.Context) error {
-	_, err := s.col.Indexes().CreateMany(ctx, []mongo.IndexModel{
+	_, err := s.col.Indexes().CreateMany(ctx, []drivermongo.IndexModel{
 		{
 			Keys: bson.D{
 				{Key: fieldOrganizationID, Value: 1},
@@ -42,10 +57,10 @@ func (s *Store) EnsureIndexes(ctx context.Context) error {
 }
 
 // Create inserts an employee.
-func (s *Store) Create(ctx context.Context, employee Employee) error {
+func (s *Store) Create(ctx context.Context, employee employees.Employee) error {
 	_, err := s.col.InsertOne(ctx, employee)
-	if mongo.IsDuplicateKeyError(err) {
-		return ErrEmailTaken
+	if drivermongo.IsDuplicateKeyError(err) {
+		return employees.ErrEmailTaken
 	}
 
 	if err != nil {
@@ -56,45 +71,45 @@ func (s *Store) Create(ctx context.Context, employee Employee) error {
 }
 
 // GetByID returns an employee scoped to an organization.
-func (s *Store) GetByID(ctx context.Context, organizationID, employeeID string) (Employee, error) {
-	var employee Employee
+func (s *Store) GetByID(ctx context.Context, organizationID, employeeID string) (employees.Employee, error) {
+	var employee employees.Employee
 
 	err := s.col.FindOne(ctx, bson.M{
 		fieldID:             employeeID,
 		fieldOrganizationID: organizationID,
 	}).Decode(&employee)
-	if errors.Is(err, mongo.ErrNoDocuments) {
-		return Employee{}, ErrNotFound
+	if errors.Is(err, drivermongo.ErrNoDocuments) {
+		return employees.Employee{}, employees.ErrNotFound
 	}
 
 	if err != nil {
-		return Employee{}, fmt.Errorf("find employee: %w", err)
+		return employees.Employee{}, fmt.Errorf("find employee: %w", err)
 	}
 
 	return employee, nil
 }
 
 // GetByUserID returns an employee linked to a user, scoped to an organization.
-func (s *Store) GetByUserID(ctx context.Context, organizationID, userID string) (Employee, error) {
-	var employee Employee
+func (s *Store) GetByUserID(ctx context.Context, organizationID, userID string) (employees.Employee, error) {
+	var employee employees.Employee
 
 	err := s.col.FindOne(ctx, bson.M{
 		fieldOrganizationID: organizationID,
 		fieldUserID:         userID,
 	}).Decode(&employee)
-	if errors.Is(err, mongo.ErrNoDocuments) {
-		return Employee{}, ErrNotFound
+	if errors.Is(err, drivermongo.ErrNoDocuments) {
+		return employees.Employee{}, employees.ErrNotFound
 	}
 
 	if err != nil {
-		return Employee{}, fmt.Errorf("find employee by user: %w", err)
+		return employees.Employee{}, fmt.Errorf("find employee by user: %w", err)
 	}
 
 	return employee, nil
 }
 
 // List returns employees for an organization.
-func (s *Store) List(ctx context.Context, organizationID string, limit int64) ([]Employee, error) {
+func (s *Store) List(ctx context.Context, organizationID string, limit int64) ([]employees.Employee, error) {
 	if limit <= 0 || limit > maxListLimit {
 		limit = defaultListLimit
 	}
@@ -108,7 +123,7 @@ func (s *Store) List(ctx context.Context, organizationID string, limit int64) ([
 		return nil, fmt.Errorf("find employees: %w", err)
 	}
 
-	items := make([]Employee, 0)
+	items := make([]employees.Employee, 0)
 	decodeErr := cursor.All(ctx, &items)
 	closeErr := cursor.Close(ctx)
 
@@ -131,7 +146,7 @@ func (s *Store) List(ctx context.Context, organizationID string, limit int64) ([
 }
 
 // Update replaces an employee document.
-func (s *Store) Update(ctx context.Context, employee Employee) error {
+func (s *Store) Update(ctx context.Context, employee employees.Employee) error {
 	res, err := s.col.ReplaceOne(ctx, bson.M{
 		fieldID:             employee.ID,
 		fieldOrganizationID: employee.OrganizationID,
@@ -141,7 +156,7 @@ func (s *Store) Update(ctx context.Context, employee Employee) error {
 	}
 
 	if res.MatchedCount == 0 {
-		return ErrNotFound
+		return employees.ErrNotFound
 	}
 
 	return nil
@@ -168,8 +183,8 @@ func (s *Store) ProvisionAccess(ctx context.Context, organizationID, employeeID,
 	}
 
 	if employee.UserID != "" {
-		return ErrAlreadyProvisioned
+		return employees.ErrAlreadyProvisioned
 	}
 
-	return ErrNotFound
+	return employees.ErrNotFound
 }

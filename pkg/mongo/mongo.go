@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"time"
 
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.mongodb.org/mongo-driver/mongo/readpref"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
 )
 
 const defaultConnectTimeout = 10 * time.Second
@@ -22,15 +22,15 @@ type Database struct {
 
 // Connect establishes a MongoDB connection and verifies connectivity.
 func Connect(ctx context.Context, uri, database string) (*Database, error) {
-	connectCtx, cancel := context.WithTimeout(ctx, defaultConnectTimeout)
-	defer cancel()
-
-	client, err := mongo.Connect(connectCtx, options.Client().ApplyURI(uri))
+	client, err := mongo.Connect(options.Client().ApplyURI(uri).SetTimeout(defaultConnectTimeout))
 	if err != nil {
 		return nil, fmt.Errorf("mongo connect: %w", err)
 	}
 
-	if err := client.Ping(connectCtx, readpref.Primary()); err != nil {
+	pingCtx, cancel := context.WithTimeout(ctx, defaultConnectTimeout)
+	defer cancel()
+
+	if err := client.Ping(pingCtx, readpref.Primary()); err != nil {
 		disconnectErr := client.Disconnect(context.WithoutCancel(ctx))
 		if disconnectErr != nil {
 			return nil, errors.Join(

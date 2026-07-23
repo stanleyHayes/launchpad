@@ -13,11 +13,6 @@ var (
 )
 
 const (
-	fieldID             = "_id"
-	fieldOrganizationID = "organizationId"
-	fieldStatus         = "status"
-	fieldCreatedAt      = "createdAt"
-
 	priorityLow    = "low"
 	priorityNormal = "normal"
 	priorityHigh   = "high"

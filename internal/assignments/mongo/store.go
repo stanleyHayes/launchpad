@@ -1,24 +1,39 @@
-package assignments
+// Package mongo is the MongoDB persistence adapter for this domain.
+package mongo
 
 import (
 	"context"
 	"errors"
 	"fmt"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	drivermongo "go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"launchpad/internal/assignments"
 )
+
+const (
+	fieldID             = "_id"
+	fieldOrganizationID = "organizationId"
+	fieldEmployeeID     = "employeeId"
+	fieldCreatedAt      = "createdAt"
+
+	statusScheduled  = "scheduled"
+	statusInProgress = "in_progress"
+)
+
+var _ assignments.Repository = (*Store)(nil)
 
 // Store persists journey and step assignments.
 type Store struct {
-	assignments *mongo.Collection
-	steps       *mongo.Collection
-	approvals   *mongo.Collection
+	assignments *drivermongo.Collection
+	steps       *drivermongo.Collection
+	approvals   *drivermongo.Collection
 }
 
 // NewStore constructs a Store.
-func NewStore(db *mongo.Database) *Store {
+func NewStore(db *drivermongo.Database) *Store {
 	return &Store{
 		assignments: db.Collection("journey_assignments"),
 		steps:       db.Collection("step_assignments"),
@@ -28,7 +43,7 @@ func NewStore(db *mongo.Database) *Store {
 
 // EnsureIndexes creates assignment indexes.
 func (s *Store) EnsureIndexes(ctx context.Context) error {
-	_, err := s.assignments.Indexes().CreateMany(ctx, []mongo.IndexModel{
+	_, err := s.assignments.Indexes().CreateMany(ctx, []drivermongo.IndexModel{
 		{
 			Keys: bson.D{
 				{Key: fieldOrganizationID, Value: 1},
@@ -42,7 +57,7 @@ func (s *Store) EnsureIndexes(ctx context.Context) error {
 		return fmt.Errorf("ensure journey assignment indexes: %w", err)
 	}
 
-	_, err = s.steps.Indexes().CreateMany(ctx, []mongo.IndexModel{
+	_, err = s.steps.Indexes().CreateMany(ctx, []drivermongo.IndexModel{
 		{
 			Keys: bson.D{
 				{Key: fieldOrganizationID, Value: 1},
@@ -56,7 +71,7 @@ func (s *Store) EnsureIndexes(ctx context.Context) error {
 		return fmt.Errorf("ensure step assignment indexes: %w", err)
 	}
 
-	_, err = s.approvals.Indexes().CreateMany(ctx, []mongo.IndexModel{
+	_, err = s.approvals.Indexes().CreateMany(ctx, []drivermongo.IndexModel{
 		{Keys: bson.D{{Key: fieldOrganizationID, Value: 1}, {Key: "status", Value: 1}, {Key: fieldCreatedAt, Value: -1}}},
 		{Keys: bson.D{{Key: fieldOrganizationID, Value: 1}, {Key: "stepAssignmentId", Value: 1}}},
 	})
@@ -68,7 +83,7 @@ func (s *Store) EnsureIndexes(ctx context.Context) error {
 }
 
 // CreateAssignment inserts a journey assignment.
-func (s *Store) CreateAssignment(ctx context.Context, assignment JourneyAssignment) error {
+func (s *Store) CreateAssignment(ctx context.Context, assignment assignments.JourneyAssignment) error {
 	_, err := s.assignments.InsertOne(ctx, assignment)
 	if err != nil {
 		return fmt.Errorf("insert journey assignment: %w", err)
@@ -78,7 +93,7 @@ func (s *Store) CreateAssignment(ctx context.Context, assignment JourneyAssignme
 }
 
 // CreateStepAssignments inserts many step assignments.
-func (s *Store) CreateStepAssignments(ctx context.Context, steps []StepAssignment) error {
+func (s *Store) CreateStepAssignments(ctx context.Context, steps []assignments.StepAssignment) error {
 	if len(steps) == 0 {
 		return nil
 	}
@@ -97,7 +112,7 @@ func (s *Store) CreateStepAssignments(ctx context.Context, steps []StepAssignmen
 }
 
 // CreateApproval inserts an approval.
-func (s *Store) CreateApproval(ctx context.Context, approval Approval) error {
+func (s *Store) CreateApproval(ctx context.Context, approval assignments.Approval) error {
 	_, err := s.approvals.InsertOne(ctx, approval)
 	if err != nil {
 		return fmt.Errorf("insert approval: %w", err)
@@ -110,8 +125,8 @@ func (s *Store) CreateApproval(ctx context.Context, approval Approval) error {
 func (s *Store) FindActiveAssignment(
 	ctx context.Context,
 	organizationID, employeeID, templateID string,
-) (JourneyAssignment, error) {
-	var assignment JourneyAssignment
+) (assignments.JourneyAssignment, error) {
+	var assignment assignments.JourneyAssignment
 
 	err := s.assignments.FindOne(ctx, bson.M{
 		fieldOrganizationID: organizationID,
@@ -119,38 +134,41 @@ func (s *Store) FindActiveAssignment(
 		"journeyTemplateId": templateID,
 		"status":            bson.M{"$in": []string{statusScheduled, statusInProgress}},
 	}).Decode(&assignment)
-	if errors.Is(err, mongo.ErrNoDocuments) {
-		return JourneyAssignment{}, ErrNotFound
+	if errors.Is(err, drivermongo.ErrNoDocuments) {
+		return assignments.JourneyAssignment{}, assignments.ErrNotFound
 	}
 
 	if err != nil {
-		return JourneyAssignment{}, fmt.Errorf("find active assignment: %w", err)
+		return assignments.JourneyAssignment{}, fmt.Errorf("find active assignment: %w", err)
 	}
 
 	return assignment, nil
 }
 
 // GetAssignment returns one assignment.
-func (s *Store) GetAssignment(ctx context.Context, organizationID, assignmentID string) (JourneyAssignment, error) {
-	var assignment JourneyAssignment
+func (s *Store) GetAssignment(
+	ctx context.Context,
+	organizationID, assignmentID string,
+) (assignments.JourneyAssignment, error) {
+	var assignment assignments.JourneyAssignment
 
 	err := s.assignments.FindOne(ctx, bson.M{
 		fieldID:             assignmentID,
 		fieldOrganizationID: organizationID,
 	}).Decode(&assignment)
-	if errors.Is(err, mongo.ErrNoDocuments) {
-		return JourneyAssignment{}, ErrNotFound
+	if errors.Is(err, drivermongo.ErrNoDocuments) {
+		return assignments.JourneyAssignment{}, assignments.ErrNotFound
 	}
 
 	if err != nil {
-		return JourneyAssignment{}, fmt.Errorf("find assignment: %w", err)
+		return assignments.JourneyAssignment{}, fmt.Errorf("find assignment: %w", err)
 	}
 
 	return assignment, nil
 }
 
 // ListAssignments lists organization assignments.
-func (s *Store) ListAssignments(ctx context.Context, organizationID string) ([]JourneyAssignment, error) {
+func (s *Store) ListAssignments(ctx context.Context, organizationID string) ([]assignments.JourneyAssignment, error) {
 	return s.findAssignments(ctx, bson.M{fieldOrganizationID: organizationID})
 }
 
@@ -158,7 +176,7 @@ func (s *Store) ListAssignments(ctx context.Context, organizationID string) ([]J
 func (s *Store) ListAssignmentsForEmployee(
 	ctx context.Context,
 	organizationID, employeeID string,
-) ([]JourneyAssignment, error) {
+) ([]assignments.JourneyAssignment, error) {
 	return s.findAssignments(ctx, bson.M{
 		fieldOrganizationID: organizationID,
 		fieldEmployeeID:     employeeID,
@@ -166,7 +184,7 @@ func (s *Store) ListAssignmentsForEmployee(
 }
 
 // UpdateAssignment replaces an assignment.
-func (s *Store) UpdateAssignment(ctx context.Context, assignment JourneyAssignment) error {
+func (s *Store) UpdateAssignment(ctx context.Context, assignment assignments.JourneyAssignment) error {
 	res, err := s.assignments.ReplaceOne(ctx, bson.M{
 		fieldID:             assignment.ID,
 		fieldOrganizationID: assignment.OrganizationID,
@@ -176,14 +194,17 @@ func (s *Store) UpdateAssignment(ctx context.Context, assignment JourneyAssignme
 	}
 
 	if res.MatchedCount == 0 {
-		return ErrNotFound
+		return assignments.ErrNotFound
 	}
 
 	return nil
 }
 
 // ListSteps lists step assignments for a journey assignment.
-func (s *Store) ListSteps(ctx context.Context, organizationID, journeyAssignmentID string) ([]StepAssignment, error) {
+func (s *Store) ListSteps(
+	ctx context.Context,
+	organizationID, journeyAssignmentID string,
+) ([]assignments.StepAssignment, error) {
 	cursor, err := s.steps.Find(
 		ctx,
 		bson.M{
@@ -196,7 +217,7 @@ func (s *Store) ListSteps(ctx context.Context, organizationID, journeyAssignment
 		return nil, fmt.Errorf("find step assignments: %w", err)
 	}
 
-	items := make([]StepAssignment, 0)
+	items := make([]assignments.StepAssignment, 0)
 	decodeErr := cursor.All(ctx, &items)
 	closeErr := cursor.Close(ctx)
 
@@ -204,26 +225,29 @@ func (s *Store) ListSteps(ctx context.Context, organizationID, journeyAssignment
 }
 
 // GetStep returns one step assignment.
-func (s *Store) GetStep(ctx context.Context, organizationID, stepAssignmentID string) (StepAssignment, error) {
-	var step StepAssignment
+func (s *Store) GetStep(
+	ctx context.Context,
+	organizationID, stepAssignmentID string,
+) (assignments.StepAssignment, error) {
+	var step assignments.StepAssignment
 
 	err := s.steps.FindOne(ctx, bson.M{
 		fieldID:             stepAssignmentID,
 		fieldOrganizationID: organizationID,
 	}).Decode(&step)
-	if errors.Is(err, mongo.ErrNoDocuments) {
-		return StepAssignment{}, ErrStepNotFound
+	if errors.Is(err, drivermongo.ErrNoDocuments) {
+		return assignments.StepAssignment{}, assignments.ErrStepNotFound
 	}
 
 	if err != nil {
-		return StepAssignment{}, fmt.Errorf("find step assignment: %w", err)
+		return assignments.StepAssignment{}, fmt.Errorf("find step assignment: %w", err)
 	}
 
 	return step, nil
 }
 
 // UpdateStep replaces a step assignment.
-func (s *Store) UpdateStep(ctx context.Context, step StepAssignment) error {
+func (s *Store) UpdateStep(ctx context.Context, step assignments.StepAssignment) error {
 	res, err := s.steps.ReplaceOne(ctx, bson.M{
 		fieldID:             step.ID,
 		fieldOrganizationID: step.OrganizationID,
@@ -233,33 +257,33 @@ func (s *Store) UpdateStep(ctx context.Context, step StepAssignment) error {
 	}
 
 	if res.MatchedCount == 0 {
-		return ErrStepNotFound
+		return assignments.ErrStepNotFound
 	}
 
 	return nil
 }
 
 // GetApproval returns one approval.
-func (s *Store) GetApproval(ctx context.Context, organizationID, approvalID string) (Approval, error) {
-	var approval Approval
+func (s *Store) GetApproval(ctx context.Context, organizationID, approvalID string) (assignments.Approval, error) {
+	var approval assignments.Approval
 
 	err := s.approvals.FindOne(ctx, bson.M{
 		fieldID:             approvalID,
 		fieldOrganizationID: organizationID,
 	}).Decode(&approval)
-	if errors.Is(err, mongo.ErrNoDocuments) {
-		return Approval{}, ErrNotFound
+	if errors.Is(err, drivermongo.ErrNoDocuments) {
+		return assignments.Approval{}, assignments.ErrNotFound
 	}
 
 	if err != nil {
-		return Approval{}, fmt.Errorf("find approval: %w", err)
+		return assignments.Approval{}, fmt.Errorf("find approval: %w", err)
 	}
 
 	return approval, nil
 }
 
 // ListApprovals lists approvals for an organization.
-func (s *Store) ListApprovals(ctx context.Context, organizationID string) ([]Approval, error) {
+func (s *Store) ListApprovals(ctx context.Context, organizationID string) ([]assignments.Approval, error) {
 	cursor, err := s.approvals.Find(
 		ctx,
 		bson.M{fieldOrganizationID: organizationID},
@@ -269,7 +293,7 @@ func (s *Store) ListApprovals(ctx context.Context, organizationID string) ([]App
 		return nil, fmt.Errorf("find approvals: %w", err)
 	}
 
-	items := make([]Approval, 0)
+	items := make([]assignments.Approval, 0)
 	decodeErr := cursor.All(ctx, &items)
 	closeErr := cursor.Close(ctx)
 
@@ -277,26 +301,29 @@ func (s *Store) ListApprovals(ctx context.Context, organizationID string) ([]App
 }
 
 // GetApprovalByStep returns approval for a step.
-func (s *Store) GetApprovalByStep(ctx context.Context, organizationID, stepAssignmentID string) (Approval, error) {
-	var approval Approval
+func (s *Store) GetApprovalByStep(
+	ctx context.Context,
+	organizationID, stepAssignmentID string,
+) (assignments.Approval, error) {
+	var approval assignments.Approval
 
 	err := s.approvals.FindOne(ctx, bson.M{
 		fieldOrganizationID: organizationID,
 		"stepAssignmentId":  stepAssignmentID,
 	}).Decode(&approval)
-	if errors.Is(err, mongo.ErrNoDocuments) {
-		return Approval{}, ErrNotFound
+	if errors.Is(err, drivermongo.ErrNoDocuments) {
+		return assignments.Approval{}, assignments.ErrNotFound
 	}
 
 	if err != nil {
-		return Approval{}, fmt.Errorf("find approval by step: %w", err)
+		return assignments.Approval{}, fmt.Errorf("find approval by step: %w", err)
 	}
 
 	return approval, nil
 }
 
 // UpdateApproval replaces an approval.
-func (s *Store) UpdateApproval(ctx context.Context, approval Approval) error {
+func (s *Store) UpdateApproval(ctx context.Context, approval assignments.Approval) error {
 	res, err := s.approvals.ReplaceOne(ctx, bson.M{
 		fieldID:             approval.ID,
 		fieldOrganizationID: approval.OrganizationID,
@@ -306,13 +333,13 @@ func (s *Store) UpdateApproval(ctx context.Context, approval Approval) error {
 	}
 
 	if res.MatchedCount == 0 {
-		return ErrNotFound
+		return assignments.ErrNotFound
 	}
 
 	return nil
 }
 
-func (s *Store) findAssignments(ctx context.Context, filter bson.M) ([]JourneyAssignment, error) {
+func (s *Store) findAssignments(ctx context.Context, filter bson.M) ([]assignments.JourneyAssignment, error) {
 	cursor, err := s.assignments.Find(
 		ctx,
 		filter,
@@ -322,7 +349,7 @@ func (s *Store) findAssignments(ctx context.Context, filter bson.M) ([]JourneyAs
 		return nil, fmt.Errorf("find assignments: %w", err)
 	}
 
-	items := make([]JourneyAssignment, 0)
+	items := make([]assignments.JourneyAssignment, 0)
 	decodeErr := cursor.All(ctx, &items)
 	closeErr := cursor.Close(ctx)
 

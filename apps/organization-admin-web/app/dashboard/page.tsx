@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { AuditEvent, MeResponse, Notification } from "@launchpad/api-client";
+import type { AuditEvent, MeResponse, Notification, OnboardingSummary } from "@launchpad/api-client";
 import { ApiError } from "@launchpad/api-client";
 import {
   EmptyState,
@@ -22,9 +22,8 @@ export default function DashboardPage() {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [employeeCount, setEmployeeCount] = useState<number | null>(null);
+  const [summary, setSummary] = useState<OnboardingSummary | null>(null);
   const [journeyCount, setJourneyCount] = useState<number | null>(null);
-  const [approvalCount, setApprovalCount] = useState<number | null>(null);
   const [featureFlags, setFeatureFlags] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
 
@@ -38,22 +37,20 @@ export default function DashboardPage() {
       void (async () => {
         try {
           const client = getClient();
-          const [profile, auditEvents, noticeItems, employees, journeys, approvals, flags] =
+          const [profile, auditEvents, noticeItems, analytics, journeys, flags] =
             await Promise.all([
               client.me(),
               client.listAuditEvents(8),
               client.listNotifications(),
-              client.listEmployees(),
+              client.getOnboardingAnalytics(),
               client.listJourneys(),
-              client.listApprovals(),
               client.listFeatureFlags(),
             ]);
           setMe(profile);
           setEvents(auditEvents);
           setNotifications(noticeItems);
-          setEmployeeCount(employees.length);
+          setSummary(analytics);
           setJourneyCount(journeys.length);
-          setApprovalCount(approvals.filter((item) => item.status === "pending").length);
           setFeatureFlags(flags.flags);
         } catch (err) {
           if (err instanceof ApiError && err.status === 401) {
@@ -104,11 +101,14 @@ export default function DashboardPage() {
               label="Organization status"
               value={me?.organization?.status ?? (pending ? "…" : "—")}
             />
-            <MetricCard label="Employees" value={employeeCount ?? (pending ? "…" : "—")} />
+            <MetricCard
+              label="Employees"
+              value={summary?.employeeCount ?? (pending ? "…" : "—")}
+            />
             <MetricCard label="Journeys" value={journeyCount ?? (pending ? "…" : "—")} />
             <MetricCard
               label="Pending approvals"
-              value={approvalCount ?? (pending ? "…" : "—")}
+              value={summary?.pendingApprovalCount ?? (pending ? "…" : "—")}
               hint="Needs manager decision"
             />
           </section>

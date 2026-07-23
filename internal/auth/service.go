@@ -34,7 +34,7 @@ type Service struct {
 	users         UserRepository
 	orgs          *organizations.Service
 	audit         *audit.Service
-	sessions      *SessionStore
+	sessions      SessionRepository
 	platformStaff PlatformStaffReader
 	cfg           Config
 }
@@ -51,7 +51,7 @@ func NewService(
 	users UserRepository,
 	orgs *organizations.Service,
 	auditSvc *audit.Service,
-	sessions *SessionStore,
+	sessions SessionRepository,
 	cfg Config,
 	platformStaff PlatformStaffReader,
 ) *Service {

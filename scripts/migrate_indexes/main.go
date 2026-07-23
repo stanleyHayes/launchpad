@@ -8,19 +8,20 @@ import (
 	"os"
 	"time"
 
-	"launchpad/internal/assignments"
-	"launchpad/internal/audit"
-	"launchpad/internal/auth"
-	"launchpad/internal/billing"
-	"launchpad/internal/departments"
-	"launchpad/internal/employees"
-	"launchpad/internal/featureflags"
-	"launchpad/internal/journeys"
-	"launchpad/internal/leads"
-	"launchpad/internal/notifications"
-	"launchpad/internal/organizations"
-	"launchpad/internal/platform"
-	"launchpad/internal/support"
+	assignmentsmongo "launchpad/internal/assignments/mongo"
+	auditmongo "launchpad/internal/audit/mongo"
+	authmongo "launchpad/internal/auth/mongo"
+	billingmongo "launchpad/internal/billing/mongo"
+	cmsmongo "launchpad/internal/cms/mongo"
+	departmentsmongo "launchpad/internal/departments/mongo"
+	employeesmongo "launchpad/internal/employees/mongo"
+	featureflagsmongo "launchpad/internal/featureflags/mongo"
+	journeysmongo "launchpad/internal/journeys/mongo"
+	leadsmongo "launchpad/internal/leads/mongo"
+	notificationsmongo "launchpad/internal/notifications/mongo"
+	organizationsmongo "launchpad/internal/organizations/mongo"
+	platformmongo "launchpad/internal/platform/mongo"
+	supportmongo "launchpad/internal/support/mongo"
 	"launchpad/pkg/config"
 	"launchpad/pkg/logging"
 	mongox "launchpad/pkg/mongo"
@@ -61,19 +62,20 @@ func run() error {
 		name string
 		fn   func(context.Context) error
 	}{
-		{name: "audit", fn: audit.NewStore(db).EnsureIndexes},
-		{name: "organization", fn: organizations.NewStore(db).EnsureIndexes},
-		{name: "user", fn: auth.NewUserStore(db).EnsureIndexes},
-		{name: "department", fn: departments.NewStore(db).EnsureIndexes},
-		{name: "employee", fn: employees.NewStore(db).EnsureIndexes},
-		{name: "journey", fn: journeys.NewStore(db).EnsureIndexes},
-		{name: "assignment", fn: assignments.NewStore(db).EnsureIndexes},
-		{name: "notification", fn: notifications.NewStore(db).EnsureIndexes},
-		{name: "platform", fn: platform.NewStore(db).EnsureIndexes},
-		{name: "leads", fn: leads.NewStore(db).EnsureIndexes},
-		{name: "featureflags", fn: featureflags.NewStore(db).EnsureIndexes},
-		{name: "billing", fn: billing.NewStore(db).EnsureIndexes},
-		{name: "support", fn: support.NewStore(db).EnsureIndexes},
+		{name: "audit", fn: auditmongo.NewStore(db).EnsureIndexes},
+		{name: "organization", fn: organizationsmongo.NewStore(db).EnsureIndexes},
+		{name: "user", fn: authmongo.NewUserStore(db).EnsureIndexes},
+		{name: "department", fn: departmentsmongo.NewStore(db).EnsureIndexes},
+		{name: "employee", fn: employeesmongo.NewStore(db).EnsureIndexes},
+		{name: "journey", fn: journeysmongo.NewStore(db).EnsureIndexes},
+		{name: "assignment", fn: assignmentsmongo.NewStore(db).EnsureIndexes},
+		{name: "notification", fn: notificationsmongo.NewStore(db).EnsureIndexes},
+		{name: "platform", fn: platformmongo.NewStore(db).EnsureIndexes},
+		{name: "leads", fn: leadsmongo.NewStore(db).EnsureIndexes},
+		{name: "featureflags", fn: featureflagsmongo.NewStore(db).EnsureIndexes},
+		{name: "billing", fn: billingmongo.NewStore(db).EnsureIndexes},
+		{name: "support", fn: supportmongo.NewStore(db).EnsureIndexes},
+		{name: "cms", fn: cmsmongo.NewStore(db).EnsureIndexes},
 	}
 
 	for _, indexer := range indexers {

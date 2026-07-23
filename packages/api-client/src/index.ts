@@ -56,7 +56,7 @@ export const auditEventSchema = z.object({
   action: z.string(),
   resourceType: z.string(),
   resourceId: z.string(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
   createdAt: z.string(),
 });
 
@@ -91,7 +91,7 @@ export const employeeSchema = z.object({
   managerEmployeeId: z.string().optional(),
   startDate: z.string(),
   status: z.string(),
-  metadata: z.record(z.unknown()),
+  metadata: z.record(z.string(), z.unknown()),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -176,7 +176,7 @@ export const journeyStepSchema = z.object({
   instructions: z.string(),
   position: z.number().int(),
   dueOffsetDays: z.number().int(),
-  config: z.record(z.unknown()).nullable(),
+  config: z.record(z.string(), z.unknown()).nullable(),
   createdAt: z.string(),
 });
 
@@ -206,7 +206,7 @@ export const stepAssignmentSchema = z.object({
   position: z.number().int(),
   status: z.string(),
   dueAt: z.string().optional().nullable(),
-  submission: z.record(z.unknown()).optional().nullable(),
+  submission: z.record(z.string(), z.unknown()).optional().nullable(),
   score: z.number().optional().nullable(),
   completedAt: z.string().optional().nullable(),
   createdAt: z.string(),
@@ -299,7 +299,7 @@ export const featureFlagSchema = z.object({
 });
 
 export const orgFeatureFlagsSchema = z.object({
-  flags: z.record(z.boolean()),
+  flags: z.record(z.string(), z.boolean()),
 });
 
 export const planSchema = z.object({
@@ -366,12 +366,51 @@ export type Plan = z.infer<typeof planSchema>;
 export type Subscription = z.infer<typeof subscriptionSchema>;
 export type SupportTicket = z.infer<typeof supportTicketSchema>;
 
+export const onboardingSummarySchema = z.object({
+  employeeCount: z.number().int().nonnegative(),
+  activeAssignmentCount: z.number().int().nonnegative(),
+  completedAssignmentCount: z.number().int().nonnegative(),
+  scheduledAssignmentCount: z.number().int().nonnegative(),
+  pendingApprovalCount: z.number().int().nonnegative(),
+  completionRate: z.number().nonnegative(),
+  averageDaysToComplete: z.number().nonnegative(),
+  generatedAt: z.string(),
+});
+
+export const cmsPageSchema = z.object({
+  id: z.string(),
+  slug: z.string(),
+  title: z.string(),
+  summary: z.string(),
+  body: z.string(),
+  status: z.string(),
+  publishedAt: z.string().optional().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export type OnboardingSummary = z.infer<typeof onboardingSummarySchema>;
+export type CMSPage = z.infer<typeof cmsPageSchema>;
+
 export type CreateLeadRequest = {
   name: string;
   email: string;
   company?: string;
   message?: string;
   source?: string;
+};
+
+export type CreateCMSPageRequest = {
+  slug: string;
+  title: string;
+  summary?: string;
+  body: string;
+};
+
+export type UpdateCMSPageRequest = {
+  title?: string;
+  summary?: string;
+  body?: string;
 };
 
 export type InviteMemberRequest = {
@@ -881,6 +920,64 @@ export function createLaunchPadClient(options: LaunchPadClientOptions) {
           body: JSON.stringify(payload),
         },
         supportTicketSchema,
+      );
+    },
+
+    getOnboardingAnalytics(): Promise<OnboardingSummary> {
+      return request(
+        "/api/v1/analytics/onboarding",
+        { method: "GET" },
+        onboardingSummarySchema,
+      );
+    },
+
+    getPublishedCMSPage(slug: string): Promise<CMSPage> {
+      return request(
+        `/api/v1/cms/pages/${encodeURIComponent(slug)}`,
+        { method: "GET" },
+        cmsPageSchema,
+      );
+    },
+
+    listPlatformCMSPages(): Promise<CMSPage[]> {
+      return request("/api/v1/platform/cms/pages", { method: "GET" }, z.array(cmsPageSchema));
+    },
+
+    createPlatformCMSPage(payload: CreateCMSPageRequest): Promise<CMSPage> {
+      return request(
+        "/api/v1/platform/cms/pages",
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+        cmsPageSchema,
+      );
+    },
+
+    getPlatformCMSPage(pageId: string): Promise<CMSPage> {
+      return request(
+        `/api/v1/platform/cms/pages/${pageId}`,
+        { method: "GET" },
+        cmsPageSchema,
+      );
+    },
+
+    updatePlatformCMSPage(pageId: string, payload: UpdateCMSPageRequest): Promise<CMSPage> {
+      return request(
+        `/api/v1/platform/cms/pages/${pageId}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        },
+        cmsPageSchema,
+      );
+    },
+
+    publishPlatformCMSPage(pageId: string): Promise<CMSPage> {
+      return request(
+        `/api/v1/platform/cms/pages/${pageId}/publish`,
+        { method: "POST" },
+        cmsPageSchema,
       );
     },
   };

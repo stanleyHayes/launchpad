@@ -232,7 +232,7 @@ func (h *Handler) HandleProvisionAccess(w http.ResponseWriter, r *http.Request) 
 		"employee.provisioned",
 		"employee",
 		updated.ID,
-		map[string]any{fieldUserID: userID},
+		map[string]any{"userId": userID},
 	); err != nil {
 		slog.ErrorContext(r.Context(), "audit employee provision failed", "error", err)
 		writeError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Unable to record audit event")

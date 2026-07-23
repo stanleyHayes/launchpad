@@ -39,7 +39,7 @@ type Notifier interface {
 
 // Service implements assignment use cases.
 type Service struct {
-	store     *Store
+	repo      Repository
 	journeys  JourneyReader
 	employees EmployeeReader
 	notify    Notifier
@@ -47,13 +47,13 @@ type Service struct {
 
 // NewService constructs a Service.
 func NewService(
-	store *Store,
+	repo Repository,
 	journeyReader JourneyReader,
 	employeeReader EmployeeReader,
 	notifier Notifier,
 ) *Service {
 	return &Service{
-		store:     store,
+		repo:      repo,
 		journeys:  journeyReader,
 		employees: employeeReader,
 		notify:    notifier,
@@ -129,7 +129,7 @@ func (s *Service) Assign(
 
 // List lists organization assignments.
 func (s *Service) List(ctx context.Context, organizationID string) ([]JourneyAssignment, error) {
-	items, err := s.store.ListAssignments(ctx, organizationID)
+	items, err := s.repo.ListAssignments(ctx, organizationID)
 	if err != nil {
 		return nil, fmt.Errorf("list assignments: %w", err)
 	}
@@ -144,7 +144,7 @@ func (s *Service) ListMine(ctx context.Context, organizationID, userID string) (
 		return nil, fmt.Errorf("resolve employee: %w", err)
 	}
 
-	items, err := s.store.ListAssignmentsForEmployee(ctx, organizationID, employee.ID)
+	items, err := s.repo.ListAssignmentsForEmployee(ctx, organizationID, employee.ID)
 	if err != nil {
 		return nil, fmt.Errorf("list my assignments: %w", err)
 	}
@@ -154,7 +154,7 @@ func (s *Service) ListMine(ctx context.Context, organizationID, userID string) (
 
 // Get returns one assignment.
 func (s *Service) Get(ctx context.Context, organizationID, assignmentID string) (JourneyAssignment, error) {
-	assignment, err := s.store.GetAssignment(ctx, organizationID, assignmentID)
+	assignment, err := s.repo.GetAssignment(ctx, organizationID, assignmentID)
 	if err != nil {
 		return JourneyAssignment{}, fmt.Errorf("get assignment: %w", err)
 	}
@@ -164,11 +164,11 @@ func (s *Service) Get(ctx context.Context, organizationID, assignmentID string) 
 
 // ListSteps lists steps for an assignment.
 func (s *Service) ListSteps(ctx context.Context, organizationID, assignmentID string) ([]StepAssignment, error) {
-	if _, err := s.store.GetAssignment(ctx, organizationID, assignmentID); err != nil {
+	if _, err := s.repo.GetAssignment(ctx, organizationID, assignmentID); err != nil {
 		return nil, fmt.Errorf("get assignment: %w", err)
 	}
 
-	items, err := s.store.ListSteps(ctx, organizationID, assignmentID)
+	items, err := s.repo.ListSteps(ctx, organizationID, assignmentID)
 	if err != nil {
 		return nil, fmt.Errorf("list steps: %w", err)
 	}
@@ -182,7 +182,7 @@ func (s *Service) CompleteStep(
 	organizationID, userID, stepAssignmentID string,
 	in CompleteStepInput,
 ) (StepAssignment, error) {
-	step, err := s.store.GetStep(ctx, organizationID, stepAssignmentID)
+	step, err := s.repo.GetStep(ctx, organizationID, stepAssignmentID)
 	if err != nil {
 		return StepAssignment{}, err
 	}
@@ -206,7 +206,7 @@ func (s *Service) CompleteStep(
 		return StepAssignment{}, err
 	}
 
-	if err := s.store.UpdateStep(ctx, step); err != nil {
+	if err := s.repo.UpdateStep(ctx, step); err != nil {
 		return StepAssignment{}, err
 	}
 
@@ -279,7 +279,7 @@ func scoreFromSubmission(submission map[string]any) (float64, bool) {
 
 // ListApprovals lists approvals.
 func (s *Service) ListApprovals(ctx context.Context, organizationID string) ([]Approval, error) {
-	items, err := s.store.ListApprovals(ctx, organizationID)
+	items, err := s.repo.ListApprovals(ctx, organizationID)
 	if err != nil {
 		return nil, fmt.Errorf("list approvals: %w", err)
 	}
@@ -293,7 +293,7 @@ func (s *Service) DecideApproval(
 	organizationID, approverUserID, approvalID string,
 	in DecideApprovalInput,
 ) (Approval, error) {
-	approval, err := s.store.GetApproval(ctx, organizationID, approvalID)
+	approval, err := s.repo.GetApproval(ctx, organizationID, approvalID)
 	if err != nil {
 		return Approval{}, err
 	}
@@ -306,7 +306,7 @@ func (s *Service) DecideApproval(
 		return Approval{}, ErrInvalidState
 	}
 
-	step, err := s.store.GetStep(ctx, organizationID, approval.StepAssignmentID)
+	step, err := s.repo.GetStep(ctx, organizationID, approval.StepAssignmentID)
 	if err != nil {
 		return Approval{}, err
 	}
@@ -324,11 +324,11 @@ func (s *Service) DecideApproval(
 		step.Status = stepInProgress
 	}
 
-	if err := s.store.UpdateApproval(ctx, approval); err != nil {
+	if err := s.repo.UpdateApproval(ctx, approval); err != nil {
 		return Approval{}, err
 	}
 
-	if err := s.store.UpdateStep(ctx, step); err != nil {
+	if err := s.repo.UpdateStep(ctx, step); err != nil {
 		return Approval{}, err
 	}
 
@@ -345,7 +345,7 @@ func (s *Service) ensureNoActiveAssignment(
 	ctx context.Context,
 	organizationID, employeeID, templateID string,
 ) error {
-	if _, err := s.store.FindActiveAssignment(ctx, organizationID, employeeID, templateID); err == nil {
+	if _, err := s.repo.FindActiveAssignment(ctx, organizationID, employeeID, templateID); err == nil {
 		return ErrAlreadyAssigned
 	} else if !errors.Is(err, ErrNotFound) {
 		return err
@@ -360,16 +360,16 @@ func (s *Service) persistAssignment(
 	stepAssignments []StepAssignment,
 	approvals []Approval,
 ) error {
-	if err := s.store.CreateAssignment(ctx, assignment); err != nil {
+	if err := s.repo.CreateAssignment(ctx, assignment); err != nil {
 		return err
 	}
 
-	if err := s.store.CreateStepAssignments(ctx, stepAssignments); err != nil {
+	if err := s.repo.CreateStepAssignments(ctx, stepAssignments); err != nil {
 		return err
 	}
 
 	for _, approval := range approvals {
-		if err := s.store.CreateApproval(ctx, approval); err != nil {
+		if err := s.repo.CreateApproval(ctx, approval); err != nil {
 			return err
 		}
 	}
@@ -489,12 +489,12 @@ func markStepCompleted(step *StepAssignment) {
 }
 
 func (s *Service) recomputeProgress(ctx context.Context, organizationID, journeyAssignmentID string) error {
-	assignment, err := s.store.GetAssignment(ctx, organizationID, journeyAssignmentID)
+	assignment, err := s.repo.GetAssignment(ctx, organizationID, journeyAssignmentID)
 	if err != nil {
 		return err
 	}
 
-	steps, err := s.store.ListSteps(ctx, organizationID, journeyAssignmentID)
+	steps, err := s.repo.ListSteps(ctx, organizationID, journeyAssignmentID)
 	if err != nil {
 		return err
 	}
@@ -523,7 +523,7 @@ func (s *Service) recomputeProgress(ctx context.Context, organizationID, journey
 			}
 
 			step.Status = stepInProgress
-			if err := s.store.UpdateStep(ctx, step); err != nil {
+			if err := s.repo.UpdateStep(ctx, step); err != nil {
 				return fmt.Errorf("start next assignment step: %w", err)
 			}
 
@@ -531,5 +531,5 @@ func (s *Service) recomputeProgress(ctx context.Context, organizationID, journey
 		}
 	}
 
-	return s.store.UpdateAssignment(ctx, assignment)
+	return s.repo.UpdateAssignment(ctx, assignment)
 }

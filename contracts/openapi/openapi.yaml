@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: LaunchPad API
-  version: 0.7.0
+  version: 0.8.0
 servers:
   - url: http://localhost:8080/api/v1
 paths:
@@ -63,6 +63,94 @@ paths:
       responses:
         "201":
           description: Created
+  /cms/pages/{slug}:
+    get:
+      summary: Get a published CMS page by slug
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+  /analytics/onboarding:
+    get:
+      summary: Organization onboarding analytics summary
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+  /platform/cms/pages:
+    get:
+      summary: List CMS pages
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+    post:
+      summary: Create a draft CMS page
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCMSPageRequest"
+      responses:
+        "201":
+          description: Created
+  /platform/cms/pages/{pageID}:
+    get:
+      summary: Get a CMS page
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: pageID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+    patch:
+      summary: Update a draft CMS page
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: pageID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCMSPageRequest"
+      responses:
+        "200":
+          description: OK
+  /platform/cms/pages/{pageID}/publish:
+    post:
+      summary: Publish a draft CMS page
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: pageID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
   /platform/overview:
     get:
       summary: Platform metrics overview
@@ -665,3 +753,17 @@ components:
         displayName: { type: string }
         password: { type: string, minLength: 10 }
         roleCode: { type: string, enum: [hr_admin] }
+    CreateCMSPageRequest:
+      type: object
+      required: [slug, title, body]
+      properties:
+        slug: { type: string }
+        title: { type: string }
+        summary: { type: string }
+        body: { type: string }
+    UpdateCMSPageRequest:
+      type: object
+      properties:
+        title: { type: string }
+        summary: { type: string }
+        body: { type: string }

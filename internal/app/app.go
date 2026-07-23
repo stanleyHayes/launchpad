@@ -12,21 +12,38 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
-	"go.mongodb.org/mongo-driver/mongo"
+	drivermongo "go.mongodb.org/mongo-driver/v2/mongo"
 
+	"launchpad/internal/analytics"
 	"launchpad/internal/assignments"
+	assignmentsmongo "launchpad/internal/assignments/mongo"
 	"launchpad/internal/audit"
+	auditmongo "launchpad/internal/audit/mongo"
 	"launchpad/internal/auth"
+	authmongo "launchpad/internal/auth/mongo"
+	authredis "launchpad/internal/auth/redis"
 	"launchpad/internal/billing"
+	billingmongo "launchpad/internal/billing/mongo"
+	"launchpad/internal/cms"
+	cmsmongo "launchpad/internal/cms/mongo"
 	"launchpad/internal/departments"
+	departmentsmongo "launchpad/internal/departments/mongo"
 	"launchpad/internal/employees"
+	employeesmongo "launchpad/internal/employees/mongo"
 	"launchpad/internal/featureflags"
+	featureflagsmongo "launchpad/internal/featureflags/mongo"
 	"launchpad/internal/journeys"
+	journeysmongo "launchpad/internal/journeys/mongo"
 	"launchpad/internal/leads"
+	leadsmongo "launchpad/internal/leads/mongo"
 	"launchpad/internal/notifications"
+	notificationsmongo "launchpad/internal/notifications/mongo"
 	"launchpad/internal/organizations"
+	organizationsmongo "launchpad/internal/organizations/mongo"
 	"launchpad/internal/platform"
+	platformmongo "launchpad/internal/platform/mongo"
 	"launchpad/internal/support"
+	supportmongo "launchpad/internal/support/mongo"
 	"launchpad/pkg/config"
 	"launchpad/pkg/httpx"
 	"launchpad/pkg/middleware"
@@ -64,6 +81,8 @@ type handlers struct {
 	featureflags  *featureflags.Handler
 	billing       *billing.Handler
 	support       *support.Handler
+	analytics     *analytics.Handler
+	cms           *cms.Handler
 }
 
 type wiredServices struct {
@@ -252,20 +271,21 @@ func Run(ctx context.Context, cfg config.Config, deps Dependencies) error {
 	}
 }
 
-func buildHandlers(db *mongo.Database, deps Dependencies, cfg config.Config) wiredServices {
-	auditStore := audit.NewStore(db)
-	orgStore := organizations.NewStore(db)
-	userStore := auth.NewUserStore(db)
-	departmentStore := departments.NewStore(db)
-	employeeStore := employees.NewStore(db)
-	journeyStore := journeys.NewStore(db)
-	assignmentStore := assignments.NewStore(db)
-	notificationStore := notifications.NewStore(db)
-	platformStore := platform.NewStore(db)
-	leadStore := leads.NewStore(db)
-	featureFlagStore := featureflags.NewStore(db)
-	billingStore := billing.NewStore(db)
-	supportStore := support.NewStore(db)
+func buildHandlers(db *drivermongo.Database, deps Dependencies, cfg config.Config) wiredServices {
+	auditStore := auditmongo.NewStore(db)
+	orgStore := organizationsmongo.NewStore(db)
+	userStore := authmongo.NewUserStore(db)
+	departmentStore := departmentsmongo.NewStore(db)
+	employeeStore := employeesmongo.NewStore(db)
+	journeyStore := journeysmongo.NewStore(db)
+	assignmentStore := assignmentsmongo.NewStore(db)
+	notificationStore := notificationsmongo.NewStore(db)
+	platformStore := platformmongo.NewStore(db)
+	leadStore := leadsmongo.NewStore(db)
+	featureFlagStore := featureflagsmongo.NewStore(db)
+	billingStore := billingmongo.NewStore(db)
+	supportStore := supportmongo.NewStore(db)
+	cmsStore := cmsmongo.NewStore(db)
 
 	auditSvc := audit.NewService(auditStore)
 	orgSvc := organizations.NewService(orgStore)
@@ -280,20 +300,9 @@ func buildHandlers(db *mongo.Database, deps Dependencies, cfg config.Config) wir
 	billingSvc := billing.NewService(billingStore, billingOrg, billingOrg)
 	featureFlagSvc := featureflags.NewService(featureFlagStore, orgPlanCodeReader{orgs: orgSvc})
 	platformSvc := platform.NewService(platformStore, orgSvc, leadSvc, supportSvc)
-	sessionStore := auth.NewSessionStore(deps.Redis.RDB(), cfg.RefreshTTL)
-	authSvc := auth.NewService(
-		userStore,
-		orgSvc,
-		auditSvc,
-		sessionStore,
-		auth.Config{
-			JWTSecret:      cfg.JWTSecret,
-			AccessTTL:      cfg.AccessTTL,
-			RefreshTTL:     cfg.RefreshTTL,
-			PasswordMinLen: cfg.PasswordMinLen,
-		},
-		platformStaffReader{svc: platformSvc},
-	)
+	analyticsSvc := analytics.NewService(assignmentSvc, employeeSvc)
+	cmsSvc := cms.NewService(cmsStore)
+	authSvc := newAuthService(deps, cfg, userStore, orgSvc, auditSvc, platformSvc)
 	accounts := accountCreatorAdapter{auth: authSvc}
 	inviteAccounts := inviteAccountCreator{auth: authSvc}
 	members := memberAdderAdapter{orgs: orgSvc}
@@ -317,8 +326,33 @@ func buildHandlers(db *mongo.Database, deps Dependencies, cfg config.Config) wir
 			featureflags:  featureflags.NewHandler(featureFlagSvc),
 			billing:       billing.NewHandler(billingSvc, auditSvc),
 			support:       support.NewHandler(supportSvc),
+			analytics:     analytics.NewHandler(analyticsSvc),
+			cms:           cms.NewHandler(cmsSvc),
 		},
 	}
+}
+
+func newAuthService(
+	deps Dependencies,
+	cfg config.Config,
+	users auth.UserRepository,
+	orgs *organizations.Service,
+	auditSvc *audit.Service,
+	platformSvc *platform.Service,
+) *auth.Service {
+	return auth.NewService(
+		users,
+		orgs,
+		auditSvc,
+		authredis.NewSessionStore(deps.Redis.RDB(), cfg.RefreshTTL),
+		auth.Config{
+			JWTSecret:      cfg.JWTSecret,
+			AccessTTL:      cfg.AccessTTL,
+			RefreshTTL:     cfg.RefreshTTL,
+			PasswordMinLen: cfg.PasswordMinLen,
+		},
+		platformStaffReader{svc: platformSvc},
+	)
 }
 
 func seedDefaults(ctx context.Context, wired wiredServices) {
@@ -374,24 +408,25 @@ func bootstrapPlatformOwner(
 	slog.Info("platform owner bootstrapped", "email", email)
 }
 
-func ensureIndexes(ctx context.Context, db *mongo.Database) error {
+func ensureIndexes(ctx context.Context, db *drivermongo.Database) error {
 	indexers := []struct {
 		name string
 		fn   func(context.Context) error
 	}{
-		{name: "audit", fn: audit.NewStore(db).EnsureIndexes},
-		{name: "organization", fn: organizations.NewStore(db).EnsureIndexes},
-		{name: "user", fn: auth.NewUserStore(db).EnsureIndexes},
-		{name: "department", fn: departments.NewStore(db).EnsureIndexes},
-		{name: "employee", fn: employees.NewStore(db).EnsureIndexes},
-		{name: "journey", fn: journeys.NewStore(db).EnsureIndexes},
-		{name: "assignment", fn: assignments.NewStore(db).EnsureIndexes},
-		{name: "notification", fn: notifications.NewStore(db).EnsureIndexes},
-		{name: "platform", fn: platform.NewStore(db).EnsureIndexes},
-		{name: "leads", fn: leads.NewStore(db).EnsureIndexes},
-		{name: "featureflags", fn: featureflags.NewStore(db).EnsureIndexes},
-		{name: "billing", fn: billing.NewStore(db).EnsureIndexes},
-		{name: "support", fn: support.NewStore(db).EnsureIndexes},
+		{name: "audit", fn: auditmongo.NewStore(db).EnsureIndexes},
+		{name: "organization", fn: organizationsmongo.NewStore(db).EnsureIndexes},
+		{name: "user", fn: authmongo.NewUserStore(db).EnsureIndexes},
+		{name: "department", fn: departmentsmongo.NewStore(db).EnsureIndexes},
+		{name: "employee", fn: employeesmongo.NewStore(db).EnsureIndexes},
+		{name: "journey", fn: journeysmongo.NewStore(db).EnsureIndexes},
+		{name: "assignment", fn: assignmentsmongo.NewStore(db).EnsureIndexes},
+		{name: "notification", fn: notificationsmongo.NewStore(db).EnsureIndexes},
+		{name: "platform", fn: platformmongo.NewStore(db).EnsureIndexes},
+		{name: "leads", fn: leadsmongo.NewStore(db).EnsureIndexes},
+		{name: "featureflags", fn: featureflagsmongo.NewStore(db).EnsureIndexes},
+		{name: "billing", fn: billingmongo.NewStore(db).EnsureIndexes},
+		{name: "support", fn: supportmongo.NewStore(db).EnsureIndexes},
+		{name: "cms", fn: cmsmongo.NewStore(db).EnsureIndexes},
 	}
 
 	for _, indexer := range indexers {
@@ -429,6 +464,7 @@ func registerPublicRoutes(api chi.Router, routeHandlers handlers) {
 	api.Post("/auth/login", routeHandlers.auth.HandleLogin)
 	api.Post("/auth/refresh", routeHandlers.auth.HandleRefresh)
 	api.Post("/leads", routeHandlers.leads.HandleCreate)
+	api.Get("/cms/pages/{slug}", routeHandlers.cms.HandlePublicGetBySlug)
 }
 
 func registerPrivateRoutes(api chi.Router, cfg config.Config, routeHandlers handlers) {
@@ -492,6 +528,14 @@ func registerPlatformRoutes(platformRoutes chi.Router, routeHandlers handlers) {
 		"/platform/support/tickets/{ticketID}/status",
 		routeHandlers.support.HandlePlatformUpdateStatus,
 	)
+	platformRoutes.Get("/platform/cms/pages", routeHandlers.cms.HandlePlatformList)
+	platformRoutes.Post("/platform/cms/pages", routeHandlers.cms.HandlePlatformCreate)
+	platformRoutes.Get("/platform/cms/pages/{pageID}", routeHandlers.cms.HandlePlatformGet)
+	platformRoutes.Patch("/platform/cms/pages/{pageID}", routeHandlers.cms.HandlePlatformUpdate)
+	platformRoutes.Post(
+		"/platform/cms/pages/{pageID}/publish",
+		routeHandlers.cms.HandlePlatformPublish,
+	)
 }
 
 func registerOrganizationRoutes(orgRoutes chi.Router, routeHandlers handlers) {
@@ -536,6 +580,7 @@ func registerOrganizationRoutes(orgRoutes chi.Router, routeHandlers handlers) {
 	orgRoutes.Get("/support/tickets", routeHandlers.support.HandleOrgList)
 	orgRoutes.Post("/support/tickets", routeHandlers.support.HandleOrgCreate)
 	orgRoutes.Get("/support/tickets/{ticketID}", routeHandlers.support.HandleOrgGet)
+	orgRoutes.Get("/analytics/onboarding", routeHandlers.analytics.HandleOnboardingSummary)
 }
 
 func newServer(address string, handler http.Handler) *http.Server {

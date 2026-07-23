@@ -15,10 +15,6 @@ var (
 )
 
 const (
-	fieldKey            = "key"
-	fieldOrganizationID = "organizationId"
-	fieldID             = "_id"
-
 	flagKeyAIAssistant = "ai_assistant"
 	flagKeySlack       = "integrations_slack"
 	flagKeySSO         = "sso"
