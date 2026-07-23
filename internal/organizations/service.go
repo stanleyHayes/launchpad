@@ -162,6 +162,28 @@ func (s *Service) CountByStatus(ctx context.Context) (map[string]int64, error) {
 	return counts, nil
 }
 
+// SetPlanCode updates an organization billing plan.
+func (s *Service) SetPlanCode(ctx context.Context, id, planCode string) (Organization, error) {
+	planCode = strings.TrimSpace(planCode)
+	if id == "" || planCode == "" {
+		return Organization{}, ErrInvalidInput
+	}
+
+	org, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return Organization{}, fmt.Errorf("get organization: %w", err)
+	}
+
+	org.PlanCode = planCode
+
+	org.UpdatedAt = time.Now().UTC()
+	if err := s.repo.Update(ctx, org); err != nil {
+		return Organization{}, fmt.Errorf("update organization plan: %w", err)
+	}
+
+	return org, nil
+}
+
 // SetStatus updates an organization status.
 func (s *Service) SetStatus(ctx context.Context, id, status string) (Organization, error) {
 	status = strings.TrimSpace(status)

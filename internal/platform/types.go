@@ -30,11 +30,12 @@ type Staff struct {
 
 // Overview summarizes platform-wide metrics.
 type Overview struct {
-	TotalOrgs     int64 `json:"totalOrgs"`
-	TrialOrgs     int64 `json:"trialOrgs"`
-	ActiveOrgs    int64 `json:"activeOrgs"`
-	SuspendedOrgs int64 `json:"suspendedOrgs"`
-	TotalLeads    int64 `json:"totalLeads"`
+	TotalOrgs       int64 `json:"totalOrgs"`
+	TrialOrgs       int64 `json:"trialOrgs"`
+	ActiveOrgs      int64 `json:"activeOrgs"`
+	SuspendedOrgs   int64 `json:"suspendedOrgs"`
+	TotalLeads      int64 `json:"totalLeads"`
+	OpenTicketCount int64 `json:"openTicketCount"`
 }
 
 // RoleOwner returns the platform owner role code.

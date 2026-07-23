@@ -17,13 +17,16 @@ import (
 	"launchpad/internal/assignments"
 	"launchpad/internal/audit"
 	"launchpad/internal/auth"
+	"launchpad/internal/billing"
 	"launchpad/internal/departments"
 	"launchpad/internal/employees"
+	"launchpad/internal/featureflags"
 	"launchpad/internal/journeys"
 	"launchpad/internal/leads"
 	"launchpad/internal/notifications"
 	"launchpad/internal/organizations"
 	"launchpad/internal/platform"
+	"launchpad/internal/support"
 	"launchpad/pkg/config"
 	"launchpad/pkg/httpx"
 	"launchpad/pkg/middleware"
@@ -58,12 +61,17 @@ type handlers struct {
 	notifications *notifications.Handler
 	platform      *platform.Handler
 	leads         *leads.Handler
+	featureflags  *featureflags.Handler
+	billing       *billing.Handler
+	support       *support.Handler
 }
 
 type wiredServices struct {
-	auth     *auth.Service
-	platform *platform.Service
-	handlers handlers
+	auth         *auth.Service
+	platform     *platform.Service
+	featureflags *featureflags.Service
+	billing      *billing.Service
+	handlers     handlers
 }
 
 type accountCreatorAdapter struct {
@@ -146,6 +154,49 @@ func (a platformStaffReader) GetByUserID(ctx context.Context, userID string) (st
 	return roleCode, nil
 }
 
+type orgPlanCodeReader struct {
+	orgs *organizations.Service
+}
+
+func (a orgPlanCodeReader) PlanCode(ctx context.Context, organizationID string) (string, error) {
+	org, err := a.orgs.Get(ctx, organizationID)
+	if err != nil {
+		return "", fmt.Errorf("get organization plan code: %w", err)
+	}
+
+	return org.PlanCode, nil
+}
+
+type billingOrgAdapter struct {
+	orgs *organizations.Service
+}
+
+func (a billingOrgAdapter) Get(ctx context.Context, id string) (billing.OrganizationSummary, error) {
+	org, err := a.orgs.Get(ctx, id)
+	if err != nil {
+		return billing.OrganizationSummary{}, fmt.Errorf("get organization: %w", err)
+	}
+
+	return billing.OrganizationSummary{
+		ID:       org.ID,
+		PlanCode: org.PlanCode,
+		Status:   org.Status,
+	}, nil
+}
+
+func (a billingOrgAdapter) SetPlanCode(ctx context.Context, id, planCode string) (billing.OrganizationSummary, error) {
+	org, err := a.orgs.SetPlanCode(ctx, id, planCode)
+	if err != nil {
+		return billing.OrganizationSummary{}, fmt.Errorf("set organization plan code: %w", err)
+	}
+
+	return billing.OrganizationSummary{
+		ID:       org.ID,
+		PlanCode: org.PlanCode,
+		Status:   org.Status,
+	}, nil
+}
+
 // Run wires domain services and serves HTTP until ctx is cancelled.
 func Run(ctx context.Context, cfg config.Config, deps Dependencies) error {
 	if deps.Mongo == nil {
@@ -162,6 +213,7 @@ func Run(ctx context.Context, cfg config.Config, deps Dependencies) error {
 	}
 
 	wired := buildHandlers(db, deps, cfg)
+	seedDefaults(ctx, wired)
 	bootstrapPlatformOwner(ctx, cfg, wired.auth, wired.platform)
 
 	router := newRouter(cfg, wired.handlers)
@@ -211,6 +263,9 @@ func buildHandlers(db *mongo.Database, deps Dependencies, cfg config.Config) wir
 	notificationStore := notifications.NewStore(db)
 	platformStore := platform.NewStore(db)
 	leadStore := leads.NewStore(db)
+	featureFlagStore := featureflags.NewStore(db)
+	billingStore := billing.NewStore(db)
+	supportStore := support.NewStore(db)
 
 	auditSvc := audit.NewService(auditStore)
 	orgSvc := organizations.NewService(orgStore)
@@ -220,7 +275,11 @@ func buildHandlers(db *mongo.Database, deps Dependencies, cfg config.Config) wir
 	notificationSvc := notifications.NewService(notificationStore)
 	assignmentSvc := assignments.NewService(assignmentStore, journeySvc, employeeSvc, notificationSvc)
 	leadSvc := leads.NewService(leadStore)
-	platformSvc := platform.NewService(platformStore, orgSvc, leadSvc)
+	supportSvc := support.NewService(supportStore)
+	billingOrg := billingOrgAdapter{orgs: orgSvc}
+	billingSvc := billing.NewService(billingStore, billingOrg, billingOrg)
+	featureFlagSvc := featureflags.NewService(featureFlagStore, orgPlanCodeReader{orgs: orgSvc})
+	platformSvc := platform.NewService(platformStore, orgSvc, leadSvc, supportSvc)
 	sessionStore := auth.NewSessionStore(deps.Redis.RDB(), cfg.RefreshTTL)
 	authSvc := auth.NewService(
 		userStore,
@@ -240,8 +299,10 @@ func buildHandlers(db *mongo.Database, deps Dependencies, cfg config.Config) wir
 	members := memberAdderAdapter{orgs: orgSvc}
 
 	return wiredServices{
-		auth:     authSvc,
-		platform: platformSvc,
+		auth:         authSvc,
+		platform:     platformSvc,
+		featureflags: featureFlagSvc,
+		billing:      billingSvc,
 		handlers: handlers{
 			auth:          auth.NewHandler(authSvc),
 			orgs:          organizations.NewHandler(orgSvc, auditSvc, inviteAccounts, members),
@@ -253,7 +314,20 @@ func buildHandlers(db *mongo.Database, deps Dependencies, cfg config.Config) wir
 			notifications: notifications.NewHandler(notificationSvc),
 			platform:      platform.NewHandler(platformSvc),
 			leads:         leads.NewHandler(leadSvc),
+			featureflags:  featureflags.NewHandler(featureFlagSvc),
+			billing:       billing.NewHandler(billingSvc, auditSvc),
+			support:       support.NewHandler(supportSvc),
 		},
+	}
+}
+
+func seedDefaults(ctx context.Context, wired wiredServices) {
+	if err := wired.featureflags.SeedDefaults(ctx); err != nil {
+		slog.Warn("seed feature flags", "error", err)
+	}
+
+	if err := wired.billing.SeedDefaults(ctx); err != nil {
+		slog.Warn("seed billing plans", "error", err)
 	}
 }
 
@@ -315,6 +389,9 @@ func ensureIndexes(ctx context.Context, db *mongo.Database) error {
 		{name: "notification", fn: notifications.NewStore(db).EnsureIndexes},
 		{name: "platform", fn: platform.NewStore(db).EnsureIndexes},
 		{name: "leads", fn: leads.NewStore(db).EnsureIndexes},
+		{name: "featureflags", fn: featureflags.NewStore(db).EnsureIndexes},
+		{name: "billing", fn: billing.NewStore(db).EnsureIndexes},
+		{name: "support", fn: support.NewStore(db).EnsureIndexes},
 	}
 
 	for _, indexer := range indexers {
@@ -329,7 +406,6 @@ func ensureIndexes(ctx context.Context, db *mongo.Database) error {
 func newRouter(cfg config.Config, routeHandlers handlers) http.Handler {
 	router := chi.NewRouter()
 	router.Use(chimw.RequestID)
-	router.Use(chimw.RealIP)
 	router.Use(middleware.RequestLogger)
 	router.Use(chimw.Recoverer)
 	router.Use(middleware.CORS(cfg.CORSOrigins))
@@ -363,61 +439,103 @@ func registerPrivateRoutes(api chi.Router, cfg config.Config, routeHandlers hand
 
 		private.Group(func(platformRoutes chi.Router) {
 			platformRoutes.Use(middleware.RequirePlatform)
-			platformRoutes.Get("/platform/overview", routeHandlers.platform.HandleOverview)
-			platformRoutes.Get("/platform/organizations", routeHandlers.platform.HandleListOrganizations)
-			platformRoutes.Get(
-				"/platform/organizations/{organizationID}",
-				routeHandlers.platform.HandleGetOrganization,
-			)
-			platformRoutes.Post(
-				"/platform/organizations/{organizationID}/suspend",
-				routeHandlers.platform.HandleSuspendOrganization,
-			)
-			platformRoutes.Post(
-				"/platform/organizations/{organizationID}/activate",
-				routeHandlers.platform.HandleActivateOrganization,
-			)
-			platformRoutes.Get("/platform/leads", routeHandlers.leads.HandleList)
+			registerPlatformRoutes(platformRoutes, routeHandlers)
 		})
 
 		private.Group(func(orgRoutes chi.Router) {
 			orgRoutes.Use(middleware.RequireOrganization)
-			orgRoutes.Get("/organizations/current", routeHandlers.orgs.HandleGetCurrent)
-			orgRoutes.Patch("/organizations/current", routeHandlers.orgs.HandleUpdateCurrent)
-			orgRoutes.Post("/organizations/current/members", routeHandlers.orgs.HandleInviteMember)
-			orgRoutes.Get("/audit-events", routeHandlers.audit.HandleList)
-
-			orgRoutes.Get("/departments", routeHandlers.departments.HandleListDepartments)
-			orgRoutes.Post("/departments", routeHandlers.departments.HandleCreateDepartment)
-			orgRoutes.Get("/job-roles", routeHandlers.departments.HandleListJobRoles)
-			orgRoutes.Post("/job-roles", routeHandlers.departments.HandleCreateJobRole)
-
-			orgRoutes.Get("/employees", routeHandlers.employees.HandleList)
-			orgRoutes.Post("/employees", routeHandlers.employees.HandleCreate)
-			orgRoutes.Get("/employees/{employeeID}", routeHandlers.employees.HandleGet)
-			orgRoutes.Post("/employees/{employeeID}/provision", routeHandlers.employees.HandleProvisionAccess)
-
-			orgRoutes.Get("/journeys", routeHandlers.journeys.HandleList)
-			orgRoutes.Post("/journeys", routeHandlers.journeys.HandleCreate)
-			orgRoutes.Get("/journeys/{journeyID}", routeHandlers.journeys.HandleGet)
-			orgRoutes.Get("/journeys/{journeyID}/steps", routeHandlers.journeys.HandleListSteps)
-			orgRoutes.Post("/journeys/{journeyID}/steps", routeHandlers.journeys.HandleAddStep)
-			orgRoutes.Post("/journeys/{journeyID}/publish", routeHandlers.journeys.HandlePublish)
-
-			orgRoutes.Get("/assignments", routeHandlers.assignments.HandleList)
-			orgRoutes.Post("/assignments", routeHandlers.assignments.HandleAssign)
-			orgRoutes.Get("/assignments/{assignmentID}", routeHandlers.assignments.HandleGet)
-			orgRoutes.Get("/assignments/{assignmentID}/steps", routeHandlers.assignments.HandleListSteps)
-			orgRoutes.Get("/me/assignments", routeHandlers.assignments.HandleListMine)
-			orgRoutes.Post("/step-assignments/{stepAssignmentID}/complete", routeHandlers.assignments.HandleCompleteStep)
-
-			orgRoutes.Get("/approvals", routeHandlers.assignments.HandleListApprovals)
-			orgRoutes.Post("/approvals/{approvalID}/decide", routeHandlers.assignments.HandleDecideApproval)
-
-			orgRoutes.Get("/notifications", routeHandlers.notifications.HandleList)
-			orgRoutes.Post("/notifications/{id}/read", routeHandlers.notifications.HandleMarkRead)
+			registerOrganizationRoutes(orgRoutes, routeHandlers)
 		})
 	})
+}
+
+func registerPlatformRoutes(platformRoutes chi.Router, routeHandlers handlers) {
+	platformRoutes.Get("/platform/overview", routeHandlers.platform.HandleOverview)
+	platformRoutes.Get("/platform/organizations", routeHandlers.platform.HandleListOrganizations)
+	platformRoutes.Get(
+		"/platform/organizations/{organizationID}",
+		routeHandlers.platform.HandleGetOrganization,
+	)
+	platformRoutes.Post(
+		"/platform/organizations/{organizationID}/suspend",
+		routeHandlers.platform.HandleSuspendOrganization,
+	)
+	platformRoutes.Post(
+		"/platform/organizations/{organizationID}/activate",
+		routeHandlers.platform.HandleActivateOrganization,
+	)
+	platformRoutes.Get("/platform/leads", routeHandlers.leads.HandleList)
+	platformRoutes.Get("/platform/feature-flags", routeHandlers.featureflags.HandlePlatformList)
+	platformRoutes.Post("/platform/feature-flags", routeHandlers.featureflags.HandlePlatformCreate)
+	platformRoutes.Patch(
+		"/platform/feature-flags/{key}",
+		routeHandlers.featureflags.HandlePlatformPatch,
+	)
+	platformRoutes.Put(
+		"/platform/organizations/{organizationID}/feature-flags/{key}",
+		routeHandlers.featureflags.HandlePlatformSetOverride,
+	)
+	platformRoutes.Get("/platform/plans", routeHandlers.billing.HandlePlatformListPlans)
+	platformRoutes.Post("/platform/plans", routeHandlers.billing.HandlePlatformCreatePlan)
+	platformRoutes.Patch("/platform/plans/{code}", routeHandlers.billing.HandlePlatformPatchPlan)
+	platformRoutes.Get("/platform/subscriptions", routeHandlers.billing.HandlePlatformListSubscriptions)
+	platformRoutes.Post(
+		"/platform/organizations/{organizationID}/subscription",
+		routeHandlers.billing.HandlePlatformSetOrganizationSubscription,
+	)
+	platformRoutes.Get("/platform/support/tickets", routeHandlers.support.HandlePlatformList)
+	platformRoutes.Get(
+		"/platform/support/tickets/{ticketID}",
+		routeHandlers.support.HandlePlatformGet,
+	)
+	platformRoutes.Post(
+		"/platform/support/tickets/{ticketID}/status",
+		routeHandlers.support.HandlePlatformUpdateStatus,
+	)
+}
+
+func registerOrganizationRoutes(orgRoutes chi.Router, routeHandlers handlers) {
+	orgRoutes.Get("/organizations/current", routeHandlers.orgs.HandleGetCurrent)
+	orgRoutes.Patch("/organizations/current", routeHandlers.orgs.HandleUpdateCurrent)
+	orgRoutes.Post("/organizations/current/members", routeHandlers.orgs.HandleInviteMember)
+	orgRoutes.Get("/audit-events", routeHandlers.audit.HandleList)
+
+	orgRoutes.Get("/departments", routeHandlers.departments.HandleListDepartments)
+	orgRoutes.Post("/departments", routeHandlers.departments.HandleCreateDepartment)
+	orgRoutes.Get("/job-roles", routeHandlers.departments.HandleListJobRoles)
+	orgRoutes.Post("/job-roles", routeHandlers.departments.HandleCreateJobRole)
+
+	orgRoutes.Get("/employees", routeHandlers.employees.HandleList)
+	orgRoutes.Post("/employees", routeHandlers.employees.HandleCreate)
+	orgRoutes.Get("/employees/{employeeID}", routeHandlers.employees.HandleGet)
+	orgRoutes.Post("/employees/{employeeID}/provision", routeHandlers.employees.HandleProvisionAccess)
+
+	orgRoutes.Get("/journeys", routeHandlers.journeys.HandleList)
+	orgRoutes.Post("/journeys", routeHandlers.journeys.HandleCreate)
+	orgRoutes.Get("/journeys/{journeyID}", routeHandlers.journeys.HandleGet)
+	orgRoutes.Get("/journeys/{journeyID}/steps", routeHandlers.journeys.HandleListSteps)
+	orgRoutes.Post("/journeys/{journeyID}/steps", routeHandlers.journeys.HandleAddStep)
+	orgRoutes.Post("/journeys/{journeyID}/publish", routeHandlers.journeys.HandlePublish)
+
+	orgRoutes.Get("/assignments", routeHandlers.assignments.HandleList)
+	orgRoutes.Post("/assignments", routeHandlers.assignments.HandleAssign)
+	orgRoutes.Get("/assignments/{assignmentID}", routeHandlers.assignments.HandleGet)
+	orgRoutes.Get("/assignments/{assignmentID}/steps", routeHandlers.assignments.HandleListSteps)
+	orgRoutes.Get("/me/assignments", routeHandlers.assignments.HandleListMine)
+	orgRoutes.Post("/step-assignments/{stepAssignmentID}/complete", routeHandlers.assignments.HandleCompleteStep)
+
+	orgRoutes.Get("/approvals", routeHandlers.assignments.HandleListApprovals)
+	orgRoutes.Post("/approvals/{approvalID}/decide", routeHandlers.assignments.HandleDecideApproval)
+
+	orgRoutes.Get("/notifications", routeHandlers.notifications.HandleList)
+	orgRoutes.Post("/notifications/{id}/read", routeHandlers.notifications.HandleMarkRead)
+
+	orgRoutes.Get("/feature-flags", routeHandlers.featureflags.HandleOrgList)
+	orgRoutes.Get("/billing/plans", routeHandlers.billing.HandleOrgListPlans)
+	orgRoutes.Get("/billing/subscription", routeHandlers.billing.HandleOrgGetSubscription)
+	orgRoutes.Get("/support/tickets", routeHandlers.support.HandleOrgList)
+	orgRoutes.Post("/support/tickets", routeHandlers.support.HandleOrgCreate)
+	orgRoutes.Get("/support/tickets/{ticketID}", routeHandlers.support.HandleOrgGet)
 }
 
 func newServer(address string, handler http.Handler) *http.Server {

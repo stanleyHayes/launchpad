@@ -17,6 +17,14 @@ export const platformNav: NavGroup[] = [
       { label: "Leads", href: "/leads" },
     ],
   },
+  {
+    heading: "Business",
+    items: [
+      { label: "Feature flags", href: "/feature-flags" },
+      { label: "Billing", href: "/billing" },
+      { label: "Support", href: "/support" },
+    ],
+  },
 ];
 
 export function PlatformShell({ children }: { children: ReactNode }) {

@@ -82,6 +82,11 @@ linters:
         - '^launchpad/internal/platform\.Staff$'
         - '^launchpad/internal/platform\.Overview$'
         - '^launchpad/internal/leads\.Lead$'
+        - '^launchpad/internal/featureflags\.Flag$'
+        - '^launchpad/internal/featureflags\.Override$'
+        - '^launchpad/internal/billing\.Plan$'
+        - '^launchpad/internal/billing\.Subscription$'
+        - '^launchpad/internal/support\.Ticket$'
         - '^launchpad/pkg/security\.Claims$'
         - '^launchpad/pkg/security\.Principal$'
     wrapcheck:

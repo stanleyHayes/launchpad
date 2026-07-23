@@ -286,6 +286,55 @@ export const platformOverviewSchema = z.object({
   activeOrgs: z.number().int(),
   suspendedOrgs: z.number().int(),
   totalLeads: z.number().int(),
+  openTicketCount: z.number().int(),
+});
+
+export const featureFlagSchema = z.object({
+  key: z.string(),
+  description: z.string(),
+  enabled: z.boolean(),
+  planCodes: z.array(z.string()),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const orgFeatureFlagsSchema = z.object({
+  flags: z.record(z.boolean()),
+});
+
+export const planSchema = z.object({
+  code: z.string(),
+  name: z.string(),
+  description: z.string(),
+  priceMonthlyCents: z.number().int(),
+  currency: z.string(),
+  features: z.array(z.string()),
+  active: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const subscriptionSchema = z.object({
+  id: z.string(),
+  organizationId: z.string(),
+  planCode: z.string(),
+  status: z.string(),
+  currentPeriodEnd: z.string().optional().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const supportTicketSchema = z.object({
+  id: z.string(),
+  organizationId: z.string(),
+  createdByUserId: z.string(),
+  subject: z.string(),
+  body: z.string(),
+  priority: z.string(),
+  status: z.string(),
+  assigneeUserId: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
 });
 
 export const leadSchema = z.object({
@@ -311,6 +360,11 @@ export const organizationMembershipSchema = z.object({
 export type PlatformOverview = z.infer<typeof platformOverviewSchema>;
 export type Lead = z.infer<typeof leadSchema>;
 export type OrganizationMembership = z.infer<typeof organizationMembershipSchema>;
+export type FeatureFlag = z.infer<typeof featureFlagSchema>;
+export type OrgFeatureFlags = z.infer<typeof orgFeatureFlagsSchema>;
+export type Plan = z.infer<typeof planSchema>;
+export type Subscription = z.infer<typeof subscriptionSchema>;
+export type SupportTicket = z.infer<typeof supportTicketSchema>;
 
 export type CreateLeadRequest = {
   name: string;
@@ -325,6 +379,58 @@ export type InviteMemberRequest = {
   displayName: string;
   password: string;
   roleCode?: string;
+};
+
+export type CreateFeatureFlagRequest = {
+  key: string;
+  description: string;
+  enabled?: boolean;
+  planCodes?: string[];
+};
+
+export type UpdateFeatureFlagRequest = {
+  description?: string;
+  enabled?: boolean;
+  planCodes?: string[];
+};
+
+export type SetOrganizationFeatureFlagRequest = {
+  enabled: boolean;
+};
+
+export type CreatePlanRequest = {
+  code: string;
+  name: string;
+  description?: string;
+  priceMonthlyCents: number;
+  currency?: string;
+  features?: string[];
+  active?: boolean;
+};
+
+export type UpdatePlanRequest = {
+  name?: string;
+  description?: string;
+  priceMonthlyCents?: number;
+  currency?: string;
+  features?: string[];
+  active?: boolean;
+};
+
+export type SetOrganizationSubscriptionRequest = {
+  planCode: string;
+  status?: string;
+};
+
+export type CreateSupportTicketRequest = {
+  subject: string;
+  body: string;
+  priority?: string;
+};
+
+export type UpdateSupportTicketStatusRequest = {
+  status: string;
+  assigneeUserId?: string;
 };
 
 export type LaunchPadClientOptions = {
@@ -628,6 +734,154 @@ export function createLaunchPadClient(options: LaunchPadClientOptions) {
 
     listPlatformLeads(): Promise<Lead[]> {
       return request("/api/v1/platform/leads", { method: "GET" }, z.array(leadSchema));
+    },
+
+    listPlatformFeatureFlags(): Promise<FeatureFlag[]> {
+      return request(
+        "/api/v1/platform/feature-flags",
+        { method: "GET" },
+        z.array(featureFlagSchema),
+      );
+    },
+
+    createPlatformFeatureFlag(payload: CreateFeatureFlagRequest): Promise<FeatureFlag> {
+      return request("/api/v1/platform/feature-flags", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }, featureFlagSchema);
+    },
+
+    updatePlatformFeatureFlag(
+      key: string,
+      payload: UpdateFeatureFlagRequest,
+    ): Promise<FeatureFlag> {
+      return request(`/api/v1/platform/feature-flags/${encodeURIComponent(key)}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      }, featureFlagSchema);
+    },
+
+    setOrganizationFeatureFlag(
+      organizationId: string,
+      key: string,
+      payload: SetOrganizationFeatureFlagRequest,
+    ): Promise<{ id: string; organizationId: string; key: string; enabled: boolean; updatedAt: string; updatedBy: string }> {
+      return request(
+        `/api/v1/platform/organizations/${organizationId}/feature-flags/${encodeURIComponent(key)}`,
+        {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        },
+        z.object({
+          id: z.string(),
+          organizationId: z.string(),
+          key: z.string(),
+          enabled: z.boolean(),
+          updatedAt: z.string(),
+          updatedBy: z.string(),
+        }),
+      );
+    },
+
+    listFeatureFlags(): Promise<OrgFeatureFlags> {
+      return request("/api/v1/feature-flags", { method: "GET" }, orgFeatureFlagsSchema);
+    },
+
+    listPlatformPlans(): Promise<Plan[]> {
+      return request("/api/v1/platform/plans", { method: "GET" }, z.array(planSchema));
+    },
+
+    createPlatformPlan(payload: CreatePlanRequest): Promise<Plan> {
+      return request("/api/v1/platform/plans", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }, planSchema);
+    },
+
+    updatePlatformPlan(code: string, payload: UpdatePlanRequest): Promise<Plan> {
+      return request(`/api/v1/platform/plans/${encodeURIComponent(code)}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      }, planSchema);
+    },
+
+    listPlatformSubscriptions(): Promise<Subscription[]> {
+      return request(
+        "/api/v1/platform/subscriptions",
+        { method: "GET" },
+        z.array(subscriptionSchema),
+      );
+    },
+
+    setOrganizationSubscription(
+      organizationId: string,
+      payload: SetOrganizationSubscriptionRequest,
+    ): Promise<Subscription> {
+      return request(
+        `/api/v1/platform/organizations/${organizationId}/subscription`,
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+        subscriptionSchema,
+      );
+    },
+
+    listBillingPlans(): Promise<Plan[]> {
+      return request("/api/v1/billing/plans", { method: "GET" }, z.array(planSchema));
+    },
+
+    getBillingSubscription(): Promise<Subscription> {
+      return request("/api/v1/billing/subscription", { method: "GET" }, subscriptionSchema);
+    },
+
+    listSupportTickets(): Promise<SupportTicket[]> {
+      return request("/api/v1/support/tickets", { method: "GET" }, z.array(supportTicketSchema));
+    },
+
+    createSupportTicket(payload: CreateSupportTicketRequest): Promise<SupportTicket> {
+      return request("/api/v1/support/tickets", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }, supportTicketSchema);
+    },
+
+    getSupportTicket(ticketId: string): Promise<SupportTicket> {
+      return request(
+        `/api/v1/support/tickets/${ticketId}`,
+        { method: "GET" },
+        supportTicketSchema,
+      );
+    },
+
+    listPlatformSupportTickets(): Promise<SupportTicket[]> {
+      return request(
+        "/api/v1/platform/support/tickets",
+        { method: "GET" },
+        z.array(supportTicketSchema),
+      );
+    },
+
+    getPlatformSupportTicket(ticketId: string): Promise<SupportTicket> {
+      return request(
+        `/api/v1/platform/support/tickets/${ticketId}`,
+        { method: "GET" },
+        supportTicketSchema,
+      );
+    },
+
+    updatePlatformSupportTicketStatus(
+      ticketId: string,
+      payload: UpdateSupportTicketStatusRequest,
+    ): Promise<SupportTicket> {
+      return request(
+        `/api/v1/platform/support/tickets/${ticketId}/status`,
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+        supportTicketSchema,
+      );
     },
   };
 }

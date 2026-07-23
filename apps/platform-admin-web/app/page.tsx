@@ -70,7 +70,7 @@ export default function DashboardPage() {
         ) : null}
 
         <Reveal delay={1}>
-          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
             <MetricCard
               label="Total organizations"
               value={overview?.totalOrgs ?? (pending ? "…" : "—")}
@@ -90,6 +90,11 @@ export default function DashboardPage() {
             <MetricCard
               label="Inbound leads"
               value={overview?.totalLeads ?? (pending ? "…" : "—")}
+            />
+            <MetricCard
+              label="Open support tickets"
+              value={overview?.openTicketCount ?? (pending ? "…" : "—")}
+              hint="Needs platform attention"
             />
           </section>
         </Reveal>
@@ -113,6 +118,11 @@ export default function DashboardPage() {
                   href: "/leads",
                   label: "Leads",
                   detail: "Inbound demo and trial interest",
+                },
+                {
+                  href: "/support",
+                  label: "Support",
+                  detail: "Customer tickets and workflow",
                 },
               ].map((link) => (
                 <li key={link.href}>

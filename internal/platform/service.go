@@ -25,16 +25,22 @@ type LeadCounter interface {
 	Count(ctx context.Context) (int64, error)
 }
 
+// OpenTicketCounter counts open support tickets.
+type OpenTicketCounter interface {
+	CountOpen(ctx context.Context) (int64, error)
+}
+
 // Service implements platform staff use cases.
 type Service struct {
-	repo  Repository
-	orgs  OrganizationReader
-	leads LeadCounter
+	repo    Repository
+	orgs    OrganizationReader
+	leads   LeadCounter
+	support OpenTicketCounter
 }
 
 // NewService constructs a Service.
-func NewService(repo Repository, orgs OrganizationReader, leadsSvc LeadCounter) *Service {
-	return &Service{repo: repo, orgs: orgs, leads: leadsSvc}
+func NewService(repo Repository, orgs OrganizationReader, leadsSvc LeadCounter, supportSvc OpenTicketCounter) *Service {
+	return &Service{repo: repo, orgs: orgs, leads: leadsSvc, support: supportSvc}
 }
 
 // GetByUserID returns an active staff record.
@@ -134,16 +140,22 @@ func (s *Service) Overview(ctx context.Context) (Overview, error) {
 		return Overview{}, fmt.Errorf("count leads: %w", err)
 	}
 
+	openTickets, err := s.support.CountOpen(ctx)
+	if err != nil {
+		return Overview{}, fmt.Errorf("count open support tickets: %w", err)
+	}
+
 	var total int64
 	for _, count := range counts {
 		total += count
 	}
 
 	return Overview{
-		TotalOrgs:     total,
-		TrialOrgs:     counts[organizations.StatusTrial()],
-		ActiveOrgs:    counts[organizations.StatusActive()],
-		SuspendedOrgs: counts[organizations.StatusSuspended()],
-		TotalLeads:    totalLeads,
+		TotalOrgs:       total,
+		TrialOrgs:       counts[organizations.StatusTrial()],
+		ActiveOrgs:      counts[organizations.StatusActive()],
+		SuspendedOrgs:   counts[organizations.StatusSuspended()],
+		TotalLeads:      totalLeads,
+		OpenTicketCount: openTickets,
 	}, nil
 }

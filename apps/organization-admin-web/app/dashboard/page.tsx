@@ -25,6 +25,7 @@ export default function DashboardPage() {
   const [employeeCount, setEmployeeCount] = useState<number | null>(null);
   const [journeyCount, setJourneyCount] = useState<number | null>(null);
   const [approvalCount, setApprovalCount] = useState<number | null>(null);
+  const [featureFlags, setFeatureFlags] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -37,7 +38,7 @@ export default function DashboardPage() {
       void (async () => {
         try {
           const client = getClient();
-          const [profile, auditEvents, noticeItems, employees, journeys, approvals] =
+          const [profile, auditEvents, noticeItems, employees, journeys, approvals, flags] =
             await Promise.all([
               client.me(),
               client.listAuditEvents(8),
@@ -45,6 +46,7 @@ export default function DashboardPage() {
               client.listEmployees(),
               client.listJourneys(),
               client.listApprovals(),
+              client.listFeatureFlags(),
             ]);
           setMe(profile);
           setEvents(auditEvents);
@@ -52,6 +54,7 @@ export default function DashboardPage() {
           setEmployeeCount(employees.length);
           setJourneyCount(journeys.length);
           setApprovalCount(approvals.filter((item) => item.status === "pending").length);
+          setFeatureFlags(flags.flags);
         } catch (err) {
           if (err instanceof ApiError && err.status === 401) {
             clearSession();
@@ -143,34 +146,76 @@ export default function DashboardPage() {
               )}
             </Surface>
 
-            <Surface>
-              <h2
-                className="text-xl font-semibold"
-                style={{ fontFamily: "var(--lp-font-display)" }}
-              >
-                Quick links
-              </h2>
-              <ul className="mt-4 divide-y divide-[var(--lp-border)]">
-                {[
-                  { href: "/employees", label: "Employees", detail: "Invite, provision, assign" },
-                  { href: "/journeys", label: "Journeys", detail: "Draft, step, publish" },
-                  { href: "/approvals", label: "Approvals", detail: "Review pending steps" },
-                ].map((link) => (
-                  <li key={link.href}>
-                    <Link
-                      href={link.href}
-                      className="flex items-center justify-between gap-3 py-3 transition hover:text-[var(--lp-accent)]"
-                    >
-                      <span>
-                        <span className="block font-medium">{link.label}</span>
-                        <span className="text-sm text-[var(--lp-ink-muted)]">{link.detail}</span>
-                      </span>
-                      <span aria-hidden="true">→</span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </Surface>
+            <div className="space-y-6">
+              <Surface>
+                <h2
+                  className="text-xl font-semibold"
+                  style={{ fontFamily: "var(--lp-font-display)" }}
+                >
+                  Feature flags
+                </h2>
+                {Object.keys(featureFlags).length === 0 ? (
+                  <div className="mt-4">
+                    <EmptyState
+                      dense
+                      title="No feature flags"
+                      description="Resolved capabilities for your plan will appear here."
+                    />
+                  </div>
+                ) : (
+                  <ul className="mt-4 divide-y divide-[var(--lp-border)]">
+                    {Object.entries(featureFlags).map(([key, enabled]) => (
+                      <li
+                        key={key}
+                        className="flex items-center justify-between gap-3 py-3 text-sm"
+                      >
+                        <span className="font-medium">{key}</span>
+                        <span
+                          className={
+                            enabled
+                              ? "text-[var(--lp-success)]"
+                              : "text-[var(--lp-ink-muted)]"
+                          }
+                        >
+                          {enabled ? "Enabled" : "Disabled"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Surface>
+
+              <Surface>
+                <h2
+                  className="text-xl font-semibold"
+                  style={{ fontFamily: "var(--lp-font-display)" }}
+                >
+                  Quick links
+                </h2>
+                <ul className="mt-4 divide-y divide-[var(--lp-border)]">
+                  {[
+                    { href: "/employees", label: "Employees", detail: "Invite, provision, assign" },
+                    { href: "/journeys", label: "Journeys", detail: "Draft, step, publish" },
+                    { href: "/approvals", label: "Approvals", detail: "Review pending steps" },
+                    { href: "/billing", label: "Billing", detail: "Subscription and plans" },
+                    { href: "/support", label: "Support", detail: "Open a ticket" },
+                  ].map((link) => (
+                    <li key={link.href}>
+                      <Link
+                        href={link.href}
+                        className="flex items-center justify-between gap-3 py-3 transition hover:text-[var(--lp-accent)]"
+                      >
+                        <span>
+                          <span className="block font-medium">{link.label}</span>
+                          <span className="text-sm text-[var(--lp-ink-muted)]">{link.detail}</span>
+                        </span>
+                        <span aria-hidden="true">→</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </Surface>
+            </div>
           </section>
         </Reveal>
 

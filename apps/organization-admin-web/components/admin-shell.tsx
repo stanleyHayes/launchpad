@@ -21,6 +21,13 @@ export const orgAdminNav: NavGroup[] = [
     heading: "People",
     items: [{ label: "Employees", href: "/employees" }],
   },
+  {
+    heading: "Account",
+    items: [
+      { label: "Billing", href: "/billing" },
+      { label: "Support", href: "/support" },
+    ],
+  },
 ];
 
 export function AdminShell({ children }: { children: ReactNode }) {
