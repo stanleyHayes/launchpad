@@ -210,6 +210,12 @@ func (s *Service) CompleteStep(
 		return StepAssignment{}, err
 	}
 
+	if step.Status == stepAwaitingApproval {
+		if err := s.reopenApprovalForStep(ctx, organizationID, step); err != nil {
+			return StepAssignment{}, err
+		}
+	}
+
 	if step.Status == stepCompleted {
 		if err := s.recomputeProgress(ctx, organizationID, step.JourneyAssignmentID); err != nil {
 			return StepAssignment{}, err
@@ -338,6 +344,10 @@ func (s *Service) DecideApproval(
 		}
 	}
 
+	if err := s.notifyApprovalDecision(ctx, organizationID, step, in.Approve); err != nil {
+		return Approval{}, err
+	}
+
 	return approval, nil
 }
 
@@ -393,6 +403,77 @@ func (s *Service) notifyAssignment(
 		Body:   "You have been assigned: " + template.Name,
 	}); notifyErr != nil {
 		return fmt.Errorf("notify employee: %w", notifyErr)
+	}
+
+	return nil
+}
+
+func (s *Service) reopenApprovalForStep(
+	ctx context.Context,
+	organizationID string,
+	step StepAssignment,
+) error {
+	approval, err := s.repo.GetApprovalByStep(ctx, organizationID, step.ID)
+	if err != nil {
+		return fmt.Errorf("load approval for step: %w", err)
+	}
+
+	approval.Status = approvalPending
+	approval.Note = ""
+	approval.DecidedAt = nil
+
+	if err := s.repo.UpdateApproval(ctx, approval); err != nil {
+		return fmt.Errorf("reopen approval: %w", err)
+	}
+
+	if s.notify == nil || approval.ApproverUserID == "" {
+		return nil
+	}
+
+	if _, notifyErr := s.notify.Create(ctx, organizationID, notifications.CreateInput{
+		UserID: approval.ApproverUserID,
+		Title:  "Approval needed",
+		Body:   "An employee submitted \"" + step.Title + "\" for your review.",
+	}); notifyErr != nil {
+		return fmt.Errorf("notify approver: %w", notifyErr)
+	}
+
+	return nil
+}
+
+func (s *Service) notifyApprovalDecision(
+	ctx context.Context,
+	organizationID string,
+	step StepAssignment,
+	approved bool,
+) error {
+	if s.notify == nil {
+		return nil
+	}
+
+	employee, err := s.employees.Get(ctx, organizationID, step.EmployeeID)
+	if err != nil {
+		return fmt.Errorf("load employee for approval notice: %w", err)
+	}
+
+	if employee.UserID == "" {
+		return nil
+	}
+
+	title := "Step rejected"
+	body := "\"" + step.Title + "\" was sent back. Update it and resubmit when ready."
+
+	if approved {
+		title = "Step approved"
+		body = "\"" + step.Title + "\" was approved. Your journey can continue."
+	}
+
+	if _, notifyErr := s.notify.Create(ctx, organizationID, notifications.CreateInput{
+		UserID: employee.UserID,
+		Title:  title,
+		Body:   body,
+	}); notifyErr != nil {
+		return fmt.Errorf("notify employee of approval decision: %w", notifyErr)
 	}
 
 	return nil

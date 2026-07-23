@@ -14,6 +14,7 @@ export const employeeNav: NavGroup[] = [
     items: [
       { label: "Home", href: "/" },
       { label: "My journey", href: "/assignments" },
+      { label: "Notifications", href: "/notifications" },
     ],
   },
 ];
