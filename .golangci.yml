@@ -1,0 +1,126 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: all
+  # Disabled only when they are deprecated or actively harm idiomatic Go / Sonar readability.
+  disable:
+    - gomodguard # deprecated; replaced by gomodguard_v2 (still enabled via default:all)
+    - wsl # deprecated; replaced by wsl_v5 (still enabled via default:all)
+    - noinlineerr # rejects idiomatic `if err := ...; err != nil`, which SonarQube does not require
+  settings:
+    cyclop:
+      max-complexity: 12
+    funlen:
+      lines: 70
+      statements: 45
+    gocognit:
+      min-complexity: 18
+    gocyclo:
+      min-complexity: 12
+    lll:
+      line-length: 120
+    varnamelen:
+      min-name-length: 2
+      ignore-names:
+        - id
+        - ok
+        - db
+        - w
+        - r
+        - i
+        - n
+        - err
+        - ctx
+        - cfg
+        - svc
+        - tt
+        - t
+        - in
+    depguard:
+      rules:
+        main:
+          list-mode: lax
+          allow:
+            - $gostd
+            - launchpad
+            - github.com/go-chi
+            - github.com/golang-jwt
+            - github.com/google/uuid
+            - github.com/redis/go-redis
+            - go.mongodb.org/mongo-driver
+            - golang.org/x/crypto
+    forbidigo:
+      forbid:
+        - pattern: ^fmt\.Print.*$
+        - pattern: ^log\.(Print|Fatal|Panic).*
+          msg: use log/slog instead of the log package
+    goheader:
+      template: ""
+    exhaustruct:
+      exclude:
+        - '^github\.com/golang-jwt/jwt/v5\.RegisteredClaims$'
+        - '^net/http\.Server$'
+        - '^log/slog\.HandlerOptions$'
+        - '^go\.mongodb\.org/mongo-driver/mongo\.IndexModel$'
+        - '^go\.mongodb\.org/mongo-driver/mongo/options\..*$'
+        - '^go\.mongodb\.org/mongo-driver/bson\..*$'
+        - '^launchpad/pkg/httpx\.Envelope$'
+        - '^launchpad/pkg/config\.Config$'
+        - '^launchpad/internal/auth\.User$'
+        - '^launchpad/internal/audit\.Event$'
+        - '^launchpad/internal/employees\.Employee$'
+        - '^launchpad/internal/journeys\.Template$'
+        - '^launchpad/internal/journeys\.Step$'
+        - '^launchpad/internal/assignments\.JourneyAssignment$'
+        - '^launchpad/internal/assignments\.StepAssignment$'
+        - '^launchpad/internal/assignments\.Approval$'
+        - '^launchpad/internal/notifications\.Notification$'
+        - '^launchpad/pkg/security\.Claims$'
+        - '^launchpad/pkg/security\.Principal$'
+    wrapcheck:
+      ignore-package-globs:
+        - encoding/*
+        - github.com/go-chi/*
+    wsl_v5:
+      allow-first-in-block: true
+      allow-whole-block: false
+      branch-max-lines: 2
+  exclusions:
+    generated: lax
+    rules:
+      - path: (.+)_test\.go
+        linters:
+          - funlen
+          - gocyclo
+          - cyclop
+          - gocognit
+          - maintidx
+          - dupl
+          - exhaustruct
+      - path: apps/api/cmd/api/main\.go
+        linters:
+          - nonamedreturns
+      - path: scripts/migrate_indexes/main\.go
+        linters:
+          - nonamedreturns
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+formatters:
+  settings:
+    gci:
+      custom-order: true
+      sections:
+        - standard
+        - default
+        - prefix(launchpad)
+  enable:
+    - gofmt
+    - goimports
+    - gci

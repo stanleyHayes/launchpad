@@ -1,0 +1,105 @@
+:root {
+  --lp-ink: #0f1c2e;
+  --lp-ink-muted: #4a5a6f;
+  --lp-paper: #f3f6fa;
+  --lp-paper-elevated: #ffffff;
+  --lp-accent: #0e7c66;
+  --lp-accent-hover: #0a6352;
+  --lp-signal: #c99212;
+  --lp-border: #d5dee8;
+  --lp-danger: #b42318;
+  --lp-warning: #b54708;
+  --lp-success: #027a48;
+  --lp-sidebar: #0a1628;
+  --lp-sidebar-muted: #7d8da3;
+  --lp-font-display: "Fraunces", Georgia, serif;
+  --lp-font-body: "Sora", system-ui, sans-serif;
+  --lp-radius: 12px;
+  --lp-radius-lg: 20px;
+  --lp-shadow: 0 18px 50px rgba(15, 28, 46, 0.08);
+  --lp-max: 1440px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.lp-portal-frame {
+  background: var(--lp-paper);
+}
+
+.lp-portal-sidebar {
+  background:
+    radial-gradient(ellipse 80% 50% at 0% 0%, rgba(14, 124, 102, 0.28), transparent 55%),
+    linear-gradient(180deg, #0d1b2f 0%, var(--lp-sidebar) 55%, #07101c 100%);
+}
+
+.lp-portal-workspace {
+  background-image:
+    radial-gradient(ellipse 70% 40% at 100% 0%, rgba(14, 124, 102, 0.08), transparent 50%),
+    linear-gradient(180deg, #eef3f8 0%, var(--lp-paper) 40%, #e8eef5 100%);
+}
+
+.lp-auth-story {
+  background:
+    radial-gradient(ellipse 60% 50% at 20% 10%, rgba(14, 124, 102, 0.35), transparent 55%),
+    radial-gradient(ellipse 50% 40% at 90% 90%, rgba(201, 146, 18, 0.18), transparent 50%),
+    linear-gradient(160deg, #07101c 0%, #0f1c2e 45%, #0a1628 100%);
+}
+
+.lp-card {
+  border: 1px solid var(--lp-border);
+  border-radius: var(--lp-radius);
+  background: var(--lp-paper-elevated);
+  box-shadow: var(--lp-shadow);
+}
+
+.lp-input {
+  height: 2.75rem;
+  width: 100%;
+  border-radius: var(--lp-radius);
+  border: 1px solid var(--lp-border);
+  background: #fff;
+  padding: 0 0.875rem;
+  font-size: 0.875rem;
+  color: var(--lp-ink);
+}
+
+.lp-input:focus-visible {
+  outline: none;
+  border-color: var(--lp-accent);
+  box-shadow: 0 0 0 3px rgba(14, 124, 102, 0.2);
+}
+
+.lp-reveal {
+  animation: lp-reveal 520ms ease-out both;
+}
+
+.lp-reveal-delay-1 {
+  animation-delay: 80ms;
+}
+
+.lp-reveal-delay-2 {
+  animation-delay: 160ms;
+}
+
+.lp-reveal-delay-3 {
+  animation-delay: 240ms;
+}
+
+@keyframes lp-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

@@ -1,0 +1,370 @@
+openapi: 3.1.0
+info:
+  title: LaunchPad API
+  version: 0.5.0
+servers:
+  - url: http://localhost:8080/api/v1
+paths:
+  /auth/register:
+    post:
+      summary: Register owner and create organization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Created
+  /auth/login:
+    post:
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: OK
+  /auth/refresh:
+    post:
+      summary: Refresh access token
+      responses:
+        "200":
+          description: OK
+  /auth/logout:
+    post:
+      summary: Logout current session
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+  /auth/me:
+    get:
+      summary: Current user and organization
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+  /organizations/current:
+    get:
+      summary: Get current organization
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+    patch:
+      summary: Update current organization
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+  /audit-events:
+    get:
+      summary: List organization audit events
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+  /departments:
+    get:
+      summary: List departments
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+    post:
+      summary: Create department
+      security:
+        - bearerAuth: []
+      responses:
+        "201":
+          description: Created
+  /job-roles:
+    get:
+      summary: List job roles
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+    post:
+      summary: Create job role
+      security:
+        - bearerAuth: []
+      responses:
+        "201":
+          description: Created
+  /employees:
+    get:
+      summary: List employees
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+    post:
+      summary: Create employee
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEmployeeRequest"
+      responses:
+        "201":
+          description: Created
+  /employees/{employeeID}:
+    get:
+      summary: Get employee by id
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: employeeID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+  /employees/{employeeID}/provision:
+    post:
+      summary: Provision employee portal login
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: employeeID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+  /journeys:
+    get:
+      summary: List journey templates
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+    post:
+      summary: Create draft journey template
+      security:
+        - bearerAuth: []
+      responses:
+        "201":
+          description: Created
+  /journeys/{journeyID}:
+    get:
+      summary: Get journey template
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: journeyID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+  /journeys/{journeyID}/steps:
+    get:
+      summary: List journey steps
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: journeyID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+    post:
+      summary: Add step to draft journey
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: journeyID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "201":
+          description: Created
+  /journeys/{journeyID}/publish:
+    post:
+      summary: Publish journey template
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: journeyID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+  /assignments:
+    get:
+      summary: List journey assignments
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+    post:
+      summary: Assign published journey to employee
+      security:
+        - bearerAuth: []
+      responses:
+        "201":
+          description: Created
+  /assignments/{assignmentID}:
+    get:
+      summary: Get assignment
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: assignmentID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+  /assignments/{assignmentID}/steps:
+    get:
+      summary: List assignment steps
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: assignmentID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+  /me/assignments:
+    get:
+      summary: List assignments for current employee
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+  /step-assignments/{stepAssignmentID}/complete:
+    post:
+      summary: Complete or submit a step assignment
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: stepAssignmentID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+  /approvals:
+    get:
+      summary: List approvals
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+  /approvals/{approvalID}/decide:
+    post:
+      summary: Approve or reject a pending approval
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: approvalID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+  /notifications:
+    get:
+      summary: List notifications for current user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+  /notifications/{id}/read:
+    post:
+      summary: Mark notification as read
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [email, password, displayName, organizationName]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 10 }
+        displayName: { type: string }
+        organizationName: { type: string }
+        organizationSlug: { type: string }
+        timezone: { type: string }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+        organizationId: { type: string }
+    CreateEmployeeRequest:
+      type: object
+      required: [firstName, lastName, workEmail, startDate]
+      properties:
+        employeeNumber: { type: string }
+        firstName: { type: string }
+        lastName: { type: string }
+        workEmail: { type: string, format: email }
+        jobRoleId: { type: string }
+        departmentId: { type: string }
+        managerEmployeeId: { type: string }
+        startDate: { type: string, format: date }

@@ -1,0 +1,47 @@
+@import "tailwindcss";
+@import "@launchpad/ui/styles.css";
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--lp-paper);
+  color: var(--lp-ink);
+  font-family: var(--lp-font-body);
+}
+
+body {
+  background-image:
+    radial-gradient(ellipse 80% 50% at 10% -10%, rgba(14, 124, 102, 0.18), transparent 55%),
+    radial-gradient(ellipse 70% 45% at 90% 0%, rgba(15, 28, 46, 0.12), transparent 50%),
+    linear-gradient(180deg, #eef3f8 0%, var(--lp-paper) 40%, #e8eef5 100%);
+  background-attachment: fixed;
+}
+
+@keyframes lp-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.lp-rise {
+  animation: lp-rise 700ms ease-out both;
+}
+
+.lp-rise-delay {
+  animation: lp-rise 800ms ease-out 120ms both;
+}
+
+.lp-hero-plane {
+  min-height: 100vh;
+  background-image:
+    linear-gradient(120deg, rgba(15, 28, 46, 0.72), rgba(14, 124, 102, 0.45)),
+    url("https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=2400&q=80");
+  background-size: cover;
+  background-position: center;
+}

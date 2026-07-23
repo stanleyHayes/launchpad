@@ -1,0 +1,13 @@
+{
+  "name": "launchpad",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev:marketing": "pnpm --filter @launchpad/marketing-web dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
