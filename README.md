@@ -50,6 +50,6 @@ docker compose up --build
 ## Current delivery
 
 - **Phase 0–1:** auth, orgs, departments/roles, employees, journeys, assignments, approvals, notifications, org-admin + employee portals
-- **Phase 2 (started):** platform staff auth, tenant overview/suspend/activate, leads capture, HR admin invite, platform-admin portal
+- **Phase 2 (in progress):** platform staff, tenant ops, leads, billing plans/subscriptions, feature flags, support tickets, platform + org admin consoles
 
 See [LaunchPad_Complete_PRD_and_Build_Spec.md](./LaunchPad_Complete_PRD_and_Build_Spec.md), [CLAUDE.md](./CLAUDE.md), and [AGENTS.md](./AGENTS.md).
