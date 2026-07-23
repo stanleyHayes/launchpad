@@ -14,10 +14,18 @@ var (
 	ErrSlugTaken = errors.New("organization slug already taken")
 	// ErrInvalidInput indicates validation failed.
 	ErrInvalidInput = errors.New("invalid organization input")
+	// ErrInviteEmailTaken indicates the invited email is already registered.
+	ErrInviteEmailTaken = errors.New("email already registered")
+	// ErrInviteWeakPassword indicates the invited password does not meet policy.
+	ErrInviteWeakPassword = errors.New("password does not meet requirements")
+	// ErrInviteInvalidInput indicates invite validation failed.
+	ErrInviteInvalidInput = errors.New("invalid invite input")
 )
 
 const (
 	statusTrial            = "trial"
+	statusActive           = "active"
+	statusSuspended        = "suspended"
 	planStarter            = "starter"
 	defaultTimezone        = "UTC"
 	roleOrganizationOwner  = "organization_owner"
@@ -68,6 +76,21 @@ func slugPattern() *regexp.Regexp {
 
 func nonAlphanumericPattern() *regexp.Regexp {
 	return regexp.MustCompile(`[^a-z0-9]+`)
+}
+
+// StatusTrial returns the trial organization status.
+func StatusTrial() string {
+	return statusTrial
+}
+
+// StatusActive returns the active organization status.
+func StatusActive() string {
+	return statusActive
+}
+
+// StatusSuspended returns the suspended organization status.
+func StatusSuspended() string {
+	return statusSuspended
 }
 
 // Slugify converts a name into a URL-safe slug.

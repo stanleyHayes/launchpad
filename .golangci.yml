@@ -79,6 +79,9 @@ linters:
         - '^launchpad/internal/assignments\.StepAssignment$'
         - '^launchpad/internal/assignments\.Approval$'
         - '^launchpad/internal/notifications\.Notification$'
+        - '^launchpad/internal/platform\.Staff$'
+        - '^launchpad/internal/platform\.Overview$'
+        - '^launchpad/internal/leads\.Lead$'
         - '^launchpad/pkg/security\.Claims$'
         - '^launchpad/pkg/security\.Principal$'
     wrapcheck:

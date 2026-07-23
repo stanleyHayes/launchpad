@@ -8,22 +8,18 @@ import { PortalShell, type NavGroup } from "@launchpad/ui";
 import { getClient } from "@/lib/api";
 import { clearSession, getAccessToken } from "@/lib/session";
 
-export const orgAdminNav: NavGroup[] = [
+export const platformNav: NavGroup[] = [
   {
     heading: "Operations",
     items: [
-      { label: "Overview", href: "/dashboard" },
-      { label: "Journeys", href: "/journeys" },
-      { label: "Approvals", href: "/approvals" },
+      { label: "Overview", href: "/" },
+      { label: "Organizations", href: "/organizations" },
+      { label: "Leads", href: "/leads" },
     ],
-  },
-  {
-    heading: "People",
-    items: [{ label: "Employees", href: "/employees" }],
   },
 ];
 
-export function AdminShell({ children }: { children: ReactNode }) {
+export function PlatformShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [me, setMe] = useState<MeResponse | null>(null);
@@ -62,10 +58,10 @@ export function AdminShell({ children }: { children: ReactNode }) {
       onNavigate={(href) => {
         router.push(href);
       }}
-      groups={orgAdminNav}
-      orgLabel={me?.organization?.name}
+      groups={platformNav}
+      orgLabel="Platform staff"
       userLabel={me ? `${me.user.displayName} · ${me.roleCode}` : "Loading…"}
-      workspaceLabel="Onboarding command centre"
+      workspaceLabel="Platform control plane"
       onLogout={() => {
         void onLogout();
       }}

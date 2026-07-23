@@ -14,8 +14,10 @@ import (
 	"launchpad/internal/departments"
 	"launchpad/internal/employees"
 	"launchpad/internal/journeys"
+	"launchpad/internal/leads"
 	"launchpad/internal/notifications"
 	"launchpad/internal/organizations"
+	"launchpad/internal/platform"
 	"launchpad/pkg/config"
 	"launchpad/pkg/logging"
 	mongox "launchpad/pkg/mongo"
@@ -64,6 +66,8 @@ func run() error {
 		{name: "journey", fn: journeys.NewStore(db).EnsureIndexes},
 		{name: "assignment", fn: assignments.NewStore(db).EnsureIndexes},
 		{name: "notification", fn: notifications.NewStore(db).EnsureIndexes},
+		{name: "platform", fn: platform.NewStore(db).EnsureIndexes},
+		{name: "leads", fn: leads.NewStore(db).EnsureIndexes},
 	}
 
 	for _, indexer := range indexers {

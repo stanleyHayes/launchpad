@@ -51,4 +51,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install
+      - run: pnpm --filter @launchpad/platform-admin-web build
+      - run: pnpm --filter @launchpad/organization-admin-web build
+      - run: pnpm --filter @launchpad/employee-web build
       - run: pnpm --filter @launchpad/marketing-web build

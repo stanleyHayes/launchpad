@@ -1,4 +1,4 @@
-.PHONY: help deps up down api test lint lint-fix marketing org-admin employee migrate-indexes coverage
+.PHONY: help deps up down api test lint lint-fix marketing platform-admin org-admin employee migrate-indexes coverage
 
 help:
 	@echo "LaunchPad targets:"
@@ -8,6 +8,7 @@ help:
 	@echo "  make migrate-indexes  Ensure MongoDB indexes"
 	@echo "  make api              Run the Go API locally"
 	@echo "  make marketing        Run marketing web on :3000"
+	@echo "  make platform-admin   Run platform admin on :3001"
 	@echo "  make org-admin        Run organization admin on :3002"
 	@echo "  make employee         Run employee portal on :3003"
 	@echo "  make test             Run Go tests"
@@ -33,6 +34,9 @@ api:
 
 marketing:
 	pnpm --filter @launchpad/marketing-web dev
+
+platform-admin:
+	pnpm --filter @launchpad/platform-admin-web dev
 
 org-admin:
 	pnpm --filter @launchpad/organization-admin-web dev

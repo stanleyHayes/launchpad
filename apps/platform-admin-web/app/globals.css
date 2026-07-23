@@ -1,0 +1,11 @@
+@import "tailwindcss";
+@import "@launchpad/ui/styles.css";
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--lp-paper);
+  color: var(--lp-ink);
+  font-family: var(--lp-font-body);
+}

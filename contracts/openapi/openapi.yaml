@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: LaunchPad API
-  version: 0.5.0
+  version: 0.6.0
 servers:
   - url: http://localhost:8080/api/v1
 paths:
@@ -45,12 +45,104 @@ paths:
           description: OK
   /auth/me:
     get:
-      summary: Current user and organization
+      summary: Current user and organization (organization null for platform staff)
       security:
         - bearerAuth: []
       responses:
         "200":
           description: OK
+  /leads:
+    post:
+      summary: Capture a public marketing lead
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLeadRequest"
+      responses:
+        "201":
+          description: Created
+  /platform/overview:
+    get:
+      summary: Platform metrics overview
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+  /platform/organizations:
+    get:
+      summary: List all organizations
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+  /platform/organizations/{organizationID}:
+    get:
+      summary: Get organization by id
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: organizationID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+  /platform/organizations/{organizationID}/suspend:
+    post:
+      summary: Suspend an organization
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: organizationID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+  /platform/organizations/{organizationID}/activate:
+    post:
+      summary: Activate an organization
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: organizationID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+  /platform/leads:
+    get:
+      summary: List captured leads
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+  /organizations/current/members:
+    post:
+      summary: Invite an HR admin member
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InviteMemberRequest"
+      responses:
+        "201":
+          description: Created
   /organizations/current:
     get:
       summary: Get current organization
@@ -368,3 +460,20 @@ components:
         departmentId: { type: string }
         managerEmployeeId: { type: string }
         startDate: { type: string, format: date }
+    CreateLeadRequest:
+      type: object
+      required: [name, email]
+      properties:
+        name: { type: string }
+        email: { type: string, format: email }
+        company: { type: string }
+        message: { type: string }
+        source: { type: string }
+    InviteMemberRequest:
+      type: object
+      required: [email, displayName, password, roleCode]
+      properties:
+        email: { type: string, format: email }
+        displayName: { type: string }
+        password: { type: string, minLength: 10 }
+        roleCode: { type: string, enum: [hr_admin] }

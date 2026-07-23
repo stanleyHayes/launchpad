@@ -113,6 +113,33 @@ func Authenticate(jwtSecret string) func(http.Handler) http.Handler {
 	}
 }
 
+// RequirePlatform rejects requests from non-platform staff.
+func RequirePlatform(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		principal, ok := security.PrincipalFromContext(r.Context())
+		if !ok || !isPlatformRole(principal.RoleCode) {
+			if err := httpx.WriteError(
+				w,
+				http.StatusForbidden,
+				"FORBIDDEN",
+				"Platform access required",
+			); err != nil {
+				slog.ErrorContext(r.Context(), "write forbidden response", "error", err)
+			}
+
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func isPlatformRole(roleCode string) bool {
+	return roleCode == "platform_owner" ||
+		roleCode == "platform_admin" ||
+		strings.HasPrefix(roleCode, "platform_")
+}
+
 // RequireOrganization rejects requests missing organization context.
 func RequireOrganization(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

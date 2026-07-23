@@ -29,29 +29,35 @@ var (
 
 // Config holds process configuration.
 type Config struct {
-	AppEnv         string
-	HTTPAddr       string
-	MongoURI       string
-	MongoDatabase  string
-	RedisURL       string
-	JWTSecret      string
-	AccessTTL      time.Duration
-	RefreshTTL     time.Duration
-	PasswordMinLen int
-	CORSOrigins    []string
+	AppEnv                string
+	HTTPAddr              string
+	MongoURI              string
+	MongoDatabase         string
+	RedisURL              string
+	JWTSecret             string
+	AccessTTL             time.Duration
+	RefreshTTL            time.Duration
+	PasswordMinLen        int
+	CORSOrigins           []string
+	PlatformOwnerEmail    string
+	PlatformOwnerPassword string
+	PlatformOwnerName     string
 }
 
 // Load reads configuration from the environment.
 func Load() (Config, error) {
 	cfg := Config{
-		AppEnv:         getenv("APP_ENV", defaultAppEnv),
-		HTTPAddr:       getenv("HTTP_ADDR", defaultHTTPAddr),
-		MongoURI:       getenv("MONGODB_URI", defaultMongoURI),
-		MongoDatabase:  getenv("MONGODB_DATABASE", defaultMongoDatabase),
-		RedisURL:       getenv("REDIS_URL", defaultRedisURL),
-		JWTSecret:      os.Getenv("JWT_SECRET"),
-		PasswordMinLen: defaultPasswordMinLen,
-		CORSOrigins:    splitCSV(getenv("CORS_ORIGINS", defaultCORSOrigin)),
+		AppEnv:                getenv("APP_ENV", defaultAppEnv),
+		HTTPAddr:              getenv("HTTP_ADDR", defaultHTTPAddr),
+		MongoURI:              getenv("MONGODB_URI", defaultMongoURI),
+		MongoDatabase:         getenv("MONGODB_DATABASE", defaultMongoDatabase),
+		RedisURL:              getenv("REDIS_URL", defaultRedisURL),
+		JWTSecret:             os.Getenv("JWT_SECRET"),
+		PasswordMinLen:        defaultPasswordMinLen,
+		CORSOrigins:           splitCSV(getenv("CORS_ORIGINS", defaultCORSOrigin)),
+		PlatformOwnerEmail:    strings.TrimSpace(os.Getenv("PLATFORM_OWNER_EMAIL")),
+		PlatformOwnerPassword: os.Getenv("PLATFORM_OWNER_PASSWORD"),
+		PlatformOwnerName:     strings.TrimSpace(os.Getenv("PLATFORM_OWNER_NAME")),
 	}
 
 	accessTTL, err := time.ParseDuration(getenv("JWT_ACCESS_TTL", defaultAccessTTL))

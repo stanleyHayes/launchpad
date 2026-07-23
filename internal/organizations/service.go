@@ -137,6 +137,53 @@ func RoleEmployee() string {
 	return roleEmployee
 }
 
+// RoleHRAdmin is the membership role for HR administrators.
+func RoleHRAdmin() string {
+	return roleHRAdmin
+}
+
+// List returns all organizations.
+func (s *Service) List(ctx context.Context) ([]Organization, error) {
+	items, err := s.repo.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list organizations: %w", err)
+	}
+
+	return items, nil
+}
+
+// CountByStatus returns organization counts grouped by status.
+func (s *Service) CountByStatus(ctx context.Context) (map[string]int64, error) {
+	counts, err := s.repo.CountByStatus(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("count organizations by status: %w", err)
+	}
+
+	return counts, nil
+}
+
+// SetStatus updates an organization status.
+func (s *Service) SetStatus(ctx context.Context, id, status string) (Organization, error) {
+	status = strings.TrimSpace(status)
+	if id == "" || (status != statusActive && status != statusTrial && status != statusSuspended) {
+		return Organization{}, ErrInvalidInput
+	}
+
+	org, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return Organization{}, fmt.Errorf("get organization: %w", err)
+	}
+
+	org.Status = status
+
+	org.UpdatedAt = time.Now().UTC()
+	if err := s.repo.Update(ctx, org); err != nil {
+		return Organization{}, fmt.Errorf("update organization status: %w", err)
+	}
+
+	return org, nil
+}
+
 // AddMember adds an active membership for a user.
 func (s *Service) AddMember(
 	ctx context.Context,

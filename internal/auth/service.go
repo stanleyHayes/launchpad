@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -23,20 +24,26 @@ type Config struct {
 	PasswordMinLen int
 }
 
+// PlatformStaffReader loads platform staff roles for authentication.
+type PlatformStaffReader interface {
+	GetByUserID(ctx context.Context, userID string) (roleCode string, err error)
+}
+
 // Service implements authentication use cases.
 type Service struct {
-	users    UserRepository
-	orgs     *organizations.Service
-	audit    *audit.Service
-	sessions *SessionStore
-	cfg      Config
+	users         UserRepository
+	orgs          *organizations.Service
+	audit         *audit.Service
+	sessions      *SessionStore
+	platformStaff PlatformStaffReader
+	cfg           Config
 }
 
 // Result is returned after successful registration or login.
 type Result struct {
-	User         UserPublic                 `json:"user"`
-	Organization organizations.Organization `json:"organization"`
-	Tokens       TokenPair                  `json:"tokens"`
+	User         UserPublic                  `json:"user"`
+	Organization *organizations.Organization `json:"organization"`
+	Tokens       TokenPair                   `json:"tokens"`
 }
 
 // NewService constructs an auth Service.
@@ -46,13 +53,15 @@ func NewService(
 	auditSvc *audit.Service,
 	sessions *SessionStore,
 	cfg Config,
+	platformStaff PlatformStaffReader,
 ) *Service {
 	return &Service{
-		users:    users,
-		orgs:     orgs,
-		audit:    auditSvc,
-		sessions: sessions,
-		cfg:      cfg,
+		users:         users,
+		orgs:          orgs,
+		audit:         auditSvc,
+		sessions:      sessions,
+		platformStaff: platformStaff,
+		cfg:           cfg,
 	}
 }
 
@@ -82,7 +91,7 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (Result, error
 		return Result{}, fmt.Errorf("issue registration tokens: %w", err)
 	}
 
-	return Result{User: toPublic(user), Organization: org, Tokens: tokens}, nil
+	return Result{User: toPublic(user), Organization: &org, Tokens: tokens}, nil
 }
 
 // Login authenticates a user and returns tokens.
@@ -98,8 +107,14 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (Result, error) {
 		return Result{}, ErrInvalidCredentials
 	}
 
-	orgID, roleCode, err := s.resolveLoginMembership(ctx, user.ID, strings.TrimSpace(in.OrganizationID))
+	organizationID := strings.TrimSpace(in.OrganizationID)
+
+	orgID, roleCode, err := s.resolveLoginMembership(ctx, user.ID, organizationID)
 	if err != nil {
+		if errors.Is(err, ErrInvalidCredentials) && organizationID == "" {
+			return s.loginAsPlatformStaff(ctx, user)
+		}
+
 		return Result{}, fmt.Errorf("resolve login membership: %w", err)
 	}
 
@@ -117,7 +132,7 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (Result, error) {
 		return Result{}, fmt.Errorf("issue login tokens: %w", err)
 	}
 
-	return Result{User: toPublic(user), Organization: org, Tokens: tokens}, nil
+	return Result{User: toPublic(user), Organization: &org, Tokens: tokens}, nil
 }
 
 // Refresh rotates tokens for a valid refresh session.
@@ -140,16 +155,31 @@ func (s *Service) Refresh(ctx context.Context, sessionID, refreshToken string) (
 		return TokenPair{}, ErrSessionInvalid
 	}
 
-	membership, err := s.orgs.Membership(ctx, orgID, userID)
-	if err != nil {
-		return TokenPair{}, ErrSessionInvalid
+	var roleCode string
+
+	if orgID == "" {
+		if s.platformStaff == nil {
+			return TokenPair{}, ErrSessionInvalid
+		}
+
+		roleCode, err = s.platformStaff.GetByUserID(ctx, userID)
+		if err != nil {
+			return TokenPair{}, ErrSessionInvalid
+		}
+	} else {
+		membership, membershipErr := s.orgs.Membership(ctx, orgID, userID)
+		if membershipErr != nil {
+			return TokenPair{}, ErrSessionInvalid
+		}
+
+		roleCode = membership.RoleCode
 	}
 
 	if err := s.sessions.Delete(ctx, sessionID); err != nil {
 		return TokenPair{}, fmt.Errorf("delete old session: %w", err)
 	}
 
-	return s.issueTokens(ctx, user, orgID, membership.RoleCode)
+	return s.issueTokens(ctx, user, orgID, roleCode)
 }
 
 // Logout revokes the current session.
@@ -168,6 +198,15 @@ func (s *Service) Me(ctx context.Context, principal security.Principal) (map[str
 		return nil, fmt.Errorf("load user: %w", err)
 	}
 
+	if principal.OrganizationID == "" {
+		return map[string]any{
+			"user":         toPublic(user),
+			"organization": nil,
+			"roleCode":     principal.RoleCode,
+			"sessionId":    principal.SessionID,
+		}, nil
+	}
+
 	org, err := s.orgs.Get(ctx, principal.OrganizationID)
 	if err != nil {
 		return nil, fmt.Errorf("load organization: %w", err)
@@ -179,6 +218,16 @@ func (s *Service) Me(ctx context.Context, principal security.Principal) (map[str
 		"roleCode":     principal.RoleCode,
 		"sessionId":    principal.SessionID,
 	}, nil
+}
+
+// GetUserByEmail loads a user by email for bootstrap and admin flows.
+func (s *Service) GetUserByEmail(ctx context.Context, email string) (User, error) {
+	user, err := s.users.GetByEmail(ctx, email)
+	if err != nil {
+		return User{}, fmt.Errorf("get user by email: %w", err)
+	}
+
+	return user, nil
 }
 
 // CreateUserAccount creates an active user account with email/password.
@@ -295,6 +344,32 @@ func (s *Service) resolveLoginMembership(
 	}
 
 	return organizationID, membership.RoleCode, nil
+}
+
+func (s *Service) loginAsPlatformStaff(ctx context.Context, user User) (Result, error) {
+	if s.platformStaff == nil {
+		return Result{}, ErrInvalidCredentials
+	}
+
+	roleCode, err := s.platformStaff.GetByUserID(ctx, user.ID)
+	if err != nil {
+		if errors.Is(err, ErrPlatformStaffNotFound) {
+			return Result{}, ErrInvalidCredentials
+		}
+
+		return Result{}, fmt.Errorf("load platform staff: %w", err)
+	}
+
+	if err := s.audit.Record(ctx, nil, user.ID, "auth.login", "user", user.ID, nil); err != nil {
+		return Result{}, fmt.Errorf("%w: %w", ErrAuditFailed, err)
+	}
+
+	tokens, err := s.issueTokens(ctx, user, "", roleCode)
+	if err != nil {
+		return Result{}, fmt.Errorf("issue platform login tokens: %w", err)
+	}
+
+	return Result{User: toPublic(user), Organization: nil, Tokens: tokens}, nil
 }
 
 func (s *Service) issueTokens(ctx context.Context, user User, orgID, roleCode string) (TokenPair, error) {

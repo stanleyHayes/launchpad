@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -19,8 +20,10 @@ import (
 	"launchpad/internal/departments"
 	"launchpad/internal/employees"
 	"launchpad/internal/journeys"
+	"launchpad/internal/leads"
 	"launchpad/internal/notifications"
 	"launchpad/internal/organizations"
+	"launchpad/internal/platform"
 	"launchpad/pkg/config"
 	"launchpad/pkg/httpx"
 	"launchpad/pkg/middleware"
@@ -53,6 +56,14 @@ type handlers struct {
 	journeys      *journeys.Handler
 	assignments   *assignments.Handler
 	notifications *notifications.Handler
+	platform      *platform.Handler
+	leads         *leads.Handler
+}
+
+type wiredServices struct {
+	auth     *auth.Service
+	platform *platform.Service
+	handlers handlers
 }
 
 type accountCreatorAdapter struct {
@@ -71,6 +82,31 @@ func (a accountCreatorAdapter) CreateUserAccount(
 	return user.ID, nil
 }
 
+type inviteAccountCreator struct {
+	auth *auth.Service
+}
+
+func (a inviteAccountCreator) CreateUserAccount(
+	ctx context.Context,
+	email, displayName, password string,
+) (string, error) {
+	user, err := a.auth.CreateUserAccount(ctx, email, displayName, password)
+	if err != nil {
+		switch {
+		case errors.Is(err, auth.ErrInvalidInput):
+			return "", organizations.ErrInviteInvalidInput
+		case errors.Is(err, auth.ErrWeakPassword):
+			return "", organizations.ErrInviteWeakPassword
+		case errors.Is(err, auth.ErrEmailTaken):
+			return "", organizations.ErrInviteEmailTaken
+		default:
+			return "", fmt.Errorf("create invite user account: %w", err)
+		}
+	}
+
+	return user.ID, nil
+}
+
 type memberAdderAdapter struct {
 	orgs *organizations.Service
 }
@@ -82,6 +118,32 @@ func (a memberAdderAdapter) AddEmployeeMember(ctx context.Context, organizationI
 	}
 
 	return nil
+}
+
+func (a memberAdderAdapter) AddMember(ctx context.Context, organizationID, userID, roleCode string) error {
+	_, err := a.orgs.AddMember(ctx, organizationID, userID, roleCode)
+	if err != nil {
+		return fmt.Errorf("add member: %w", err)
+	}
+
+	return nil
+}
+
+type platformStaffReader struct {
+	svc *platform.Service
+}
+
+func (a platformStaffReader) GetByUserID(ctx context.Context, userID string) (string, error) {
+	roleCode, err := a.svc.StaffRoleByUserID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, platform.ErrNotFound) {
+			return "", auth.ErrPlatformStaffNotFound
+		}
+
+		return "", fmt.Errorf("get platform staff role: %w", err)
+	}
+
+	return roleCode, nil
 }
 
 // Run wires domain services and serves HTTP until ctx is cancelled.
@@ -99,7 +161,10 @@ func Run(ctx context.Context, cfg config.Config, deps Dependencies) error {
 		return fmt.Errorf("ensure indexes: %w", err)
 	}
 
-	router := newRouter(cfg, buildHandlers(db, deps, cfg))
+	wired := buildHandlers(db, deps, cfg)
+	bootstrapPlatformOwner(ctx, cfg, wired.auth, wired.platform)
+
+	router := newRouter(cfg, wired.handlers)
 	server := newServer(cfg.HTTPAddr, router)
 	errCh := make(chan error, 1)
 
@@ -135,7 +200,7 @@ func Run(ctx context.Context, cfg config.Config, deps Dependencies) error {
 	}
 }
 
-func buildHandlers(db *mongo.Database, deps Dependencies, cfg config.Config) handlers {
+func buildHandlers(db *mongo.Database, deps Dependencies, cfg config.Config) wiredServices {
 	auditStore := audit.NewStore(db)
 	orgStore := organizations.NewStore(db)
 	userStore := auth.NewUserStore(db)
@@ -144,6 +209,8 @@ func buildHandlers(db *mongo.Database, deps Dependencies, cfg config.Config) han
 	journeyStore := journeys.NewStore(db)
 	assignmentStore := assignments.NewStore(db)
 	notificationStore := notifications.NewStore(db)
+	platformStore := platform.NewStore(db)
+	leadStore := leads.NewStore(db)
 
 	auditSvc := audit.NewService(auditStore)
 	orgSvc := organizations.NewService(orgStore)
@@ -152,29 +219,85 @@ func buildHandlers(db *mongo.Database, deps Dependencies, cfg config.Config) han
 	journeySvc := journeys.NewService(journeyStore)
 	notificationSvc := notifications.NewService(notificationStore)
 	assignmentSvc := assignments.NewService(assignmentStore, journeySvc, employeeSvc, notificationSvc)
+	leadSvc := leads.NewService(leadStore)
+	platformSvc := platform.NewService(platformStore, orgSvc, leadSvc)
 	sessionStore := auth.NewSessionStore(deps.Redis.RDB(), cfg.RefreshTTL)
-	authSvc := auth.NewService(userStore, orgSvc, auditSvc, sessionStore, auth.Config{
-		JWTSecret:      cfg.JWTSecret,
-		AccessTTL:      cfg.AccessTTL,
-		RefreshTTL:     cfg.RefreshTTL,
-		PasswordMinLen: cfg.PasswordMinLen,
-	})
+	authSvc := auth.NewService(
+		userStore,
+		orgSvc,
+		auditSvc,
+		sessionStore,
+		auth.Config{
+			JWTSecret:      cfg.JWTSecret,
+			AccessTTL:      cfg.AccessTTL,
+			RefreshTTL:     cfg.RefreshTTL,
+			PasswordMinLen: cfg.PasswordMinLen,
+		},
+		platformStaffReader{svc: platformSvc},
+	)
+	accounts := accountCreatorAdapter{auth: authSvc}
+	inviteAccounts := inviteAccountCreator{auth: authSvc}
+	members := memberAdderAdapter{orgs: orgSvc}
 
-	return handlers{
-		auth:        auth.NewHandler(authSvc),
-		orgs:        organizations.NewHandler(orgSvc, auditSvc),
-		audit:       audit.NewHandler(auditSvc),
-		departments: departments.NewHandler(departmentSvc, auditSvc),
-		employees: employees.NewHandler(
-			employeeSvc,
-			auditSvc,
-			accountCreatorAdapter{auth: authSvc},
-			memberAdderAdapter{orgs: orgSvc},
-		),
-		journeys:      journeys.NewHandler(journeySvc, auditSvc),
-		assignments:   assignments.NewHandler(assignmentSvc, auditSvc),
-		notifications: notifications.NewHandler(notificationSvc),
+	return wiredServices{
+		auth:     authSvc,
+		platform: platformSvc,
+		handlers: handlers{
+			auth:          auth.NewHandler(authSvc),
+			orgs:          organizations.NewHandler(orgSvc, auditSvc, inviteAccounts, members),
+			audit:         audit.NewHandler(auditSvc),
+			departments:   departments.NewHandler(departmentSvc, auditSvc),
+			employees:     employees.NewHandler(employeeSvc, auditSvc, accounts, members),
+			journeys:      journeys.NewHandler(journeySvc, auditSvc),
+			assignments:   assignments.NewHandler(assignmentSvc, auditSvc),
+			notifications: notifications.NewHandler(notificationSvc),
+			platform:      platform.NewHandler(platformSvc),
+			leads:         leads.NewHandler(leadSvc),
+		},
 	}
+}
+
+func bootstrapPlatformOwner(
+	ctx context.Context,
+	cfg config.Config,
+	authSvc *auth.Service,
+	platformSvc *platform.Service,
+) {
+	email := strings.TrimSpace(cfg.PlatformOwnerEmail)
+
+	password := cfg.PlatformOwnerPassword
+	if email == "" || password == "" {
+		return
+	}
+
+	displayName := strings.TrimSpace(cfg.PlatformOwnerName)
+	if displayName == "" {
+		displayName = "Platform Owner"
+	}
+
+	user, err := authSvc.CreateUserAccount(ctx, email, displayName, password)
+	if err != nil {
+		if !errors.Is(err, auth.ErrEmailTaken) {
+			slog.Warn("bootstrap platform owner: create user", "error", err)
+
+			return
+		}
+
+		user, err = authSvc.GetUserByEmail(ctx, email)
+		if err != nil {
+			slog.Warn("bootstrap platform owner: load existing user", "error", err)
+
+			return
+		}
+	}
+
+	if _, err := platformSvc.EnsureStaff(ctx, user.ID, platform.RoleOwner()); err != nil {
+		slog.Warn("bootstrap platform owner: ensure staff", "error", err)
+
+		return
+	}
+
+	slog.Info("platform owner bootstrapped", "email", email)
 }
 
 func ensureIndexes(ctx context.Context, db *mongo.Database) error {
@@ -190,6 +313,8 @@ func ensureIndexes(ctx context.Context, db *mongo.Database) error {
 		{name: "journey", fn: journeys.NewStore(db).EnsureIndexes},
 		{name: "assignment", fn: assignments.NewStore(db).EnsureIndexes},
 		{name: "notification", fn: notifications.NewStore(db).EnsureIndexes},
+		{name: "platform", fn: platform.NewStore(db).EnsureIndexes},
+		{name: "leads", fn: leads.NewStore(db).EnsureIndexes},
 	}
 
 	for _, indexer := range indexers {
@@ -227,6 +352,7 @@ func registerPublicRoutes(api chi.Router, routeHandlers handlers) {
 	api.Post("/auth/register", routeHandlers.auth.HandleRegister)
 	api.Post("/auth/login", routeHandlers.auth.HandleLogin)
 	api.Post("/auth/refresh", routeHandlers.auth.HandleRefresh)
+	api.Post("/leads", routeHandlers.leads.HandleCreate)
 }
 
 func registerPrivateRoutes(api chi.Router, cfg config.Config, routeHandlers handlers) {
@@ -235,10 +361,30 @@ func registerPrivateRoutes(api chi.Router, cfg config.Config, routeHandlers hand
 		private.Post("/auth/logout", routeHandlers.auth.HandleLogout)
 		private.Get("/auth/me", routeHandlers.auth.HandleMe)
 
+		private.Group(func(platformRoutes chi.Router) {
+			platformRoutes.Use(middleware.RequirePlatform)
+			platformRoutes.Get("/platform/overview", routeHandlers.platform.HandleOverview)
+			platformRoutes.Get("/platform/organizations", routeHandlers.platform.HandleListOrganizations)
+			platformRoutes.Get(
+				"/platform/organizations/{organizationID}",
+				routeHandlers.platform.HandleGetOrganization,
+			)
+			platformRoutes.Post(
+				"/platform/organizations/{organizationID}/suspend",
+				routeHandlers.platform.HandleSuspendOrganization,
+			)
+			platformRoutes.Post(
+				"/platform/organizations/{organizationID}/activate",
+				routeHandlers.platform.HandleActivateOrganization,
+			)
+			platformRoutes.Get("/platform/leads", routeHandlers.leads.HandleList)
+		})
+
 		private.Group(func(orgRoutes chi.Router) {
 			orgRoutes.Use(middleware.RequireOrganization)
 			orgRoutes.Get("/organizations/current", routeHandlers.orgs.HandleGetCurrent)
 			orgRoutes.Patch("/organizations/current", routeHandlers.orgs.HandleUpdateCurrent)
+			orgRoutes.Post("/organizations/current/members", routeHandlers.orgs.HandleInviteMember)
 			orgRoutes.Get("/audit-events", routeHandlers.audit.HandleList)
 
 			orgRoutes.Get("/departments", routeHandlers.departments.HandleListDepartments)

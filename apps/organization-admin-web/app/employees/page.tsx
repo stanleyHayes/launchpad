@@ -167,6 +167,29 @@ export default function EmployeesPage() {
     });
   }
 
+  function onInviteAdmin(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setMessage(null);
+    const form = new FormData(event.currentTarget);
+    startTransition(() => {
+      void (async () => {
+        try {
+          await getClient().inviteOrganizationMember({
+            email: formString(form, "email"),
+            displayName: formString(form, "displayName"),
+            password: formString(form, "password"),
+            roleCode: "hr_admin",
+          });
+          event.currentTarget.reset();
+          setMessage("HR admin invited");
+        } catch (err) {
+          setError(err instanceof ApiError ? err.message : "Unable to invite HR admin");
+        }
+      })();
+    });
+  }
+
   return (
     <AdminShell>
       <div className="space-y-8">
@@ -353,6 +376,34 @@ export default function EmployeesPage() {
             </ul>
           )}
         </Surface>
+
+        <Reveal delay={3}>
+          <Surface>
+            <h2 className="text-lg font-semibold">Invite HR admin</h2>
+            <p className="mt-1 text-sm text-[var(--lp-ink-muted)]">
+              Add another HR administrator who can manage employees and journeys.
+            </p>
+            <form onSubmit={onInviteAdmin} className="mt-4 grid gap-3 md:grid-cols-2">
+              <input className="lp-input" name="displayName" placeholder="Full name" required />
+              <input className="lp-input" name="email" type="email" placeholder="Work email" required />
+              <input
+                className="lp-input md:col-span-2"
+                name="password"
+                type="password"
+                minLength={10}
+                placeholder="Temporary password"
+                required
+              />
+              <button
+                type="submit"
+                disabled={pending}
+                className="rounded-[var(--lp-radius)] bg-[var(--lp-accent)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60 md:col-span-2"
+              >
+                Invite HR admin
+              </button>
+            </form>
+          </Surface>
+        </Reveal>
       </div>
     </AdminShell>
   );

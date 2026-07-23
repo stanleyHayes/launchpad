@@ -10,7 +10,11 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-const fieldUserID = "userId"
+const (
+	fieldUserID         = "userId"
+	fieldOrganizationID = "organizationId"
+	fieldID             = "_id"
+)
 
 // Repository persists organizations and memberships.
 type Repository interface {
@@ -18,6 +22,8 @@ type Repository interface {
 	GetByID(ctx context.Context, id string) (Organization, error)
 	GetBySlug(ctx context.Context, slug string) (Organization, error)
 	Update(ctx context.Context, org Organization) error
+	List(ctx context.Context) ([]Organization, error)
+	CountByStatus(ctx context.Context) (map[string]int64, error)
 	CreateMembership(ctx context.Context, membership Membership) error
 	GetMembership(ctx context.Context, organizationID, userID string) (Membership, error)
 	ListMembershipsByUser(ctx context.Context, userID string) ([]Membership, error)
@@ -48,7 +54,7 @@ func (s *Store) EnsureIndexes(ctx context.Context) error {
 
 	_, err = s.memberships.Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{
-			Keys:    bson.D{{Key: "organizationId", Value: 1}, {Key: fieldUserID, Value: 1}},
+			Keys:    bson.D{{Key: fieldOrganizationID, Value: 1}, {Key: fieldUserID, Value: 1}},
 			Options: options.Index().SetUnique(true),
 		},
 		{Keys: bson.D{{Key: fieldUserID, Value: 1}}},
@@ -78,7 +84,7 @@ func (s *Store) CreateOrganization(ctx context.Context, org Organization) error 
 func (s *Store) GetByID(ctx context.Context, id string) (Organization, error) {
 	var org Organization
 
-	err := s.orgs.FindOne(ctx, bson.M{"_id": id}).Decode(&org)
+	err := s.orgs.FindOne(ctx, bson.M{fieldID: id}).Decode(&org)
 	if errors.Is(err, mongo.ErrNoDocuments) {
 		return Organization{}, ErrNotFound
 	}
@@ -106,9 +112,84 @@ func (s *Store) GetBySlug(ctx context.Context, slug string) (Organization, error
 	return org, nil
 }
 
+// List returns all organizations ordered by creation time.
+func (s *Store) List(ctx context.Context) ([]Organization, error) {
+	cursor, err := s.orgs.Find(ctx, bson.M{}, options.Find().SetSort(bson.D{{Key: "createdAt", Value: -1}}))
+	if err != nil {
+		return nil, fmt.Errorf("find organizations: %w", err)
+	}
+
+	items := make([]Organization, 0)
+	decodeErr := cursor.All(ctx, &items)
+	closeErr := cursor.Close(ctx)
+
+	if decodeErr != nil && closeErr != nil {
+		return nil, errors.Join(
+			fmt.Errorf("decode organizations: %w", decodeErr),
+			fmt.Errorf("close organizations cursor: %w", closeErr),
+		)
+	}
+
+	if decodeErr != nil {
+		return nil, fmt.Errorf("decode organizations: %w", decodeErr)
+	}
+
+	if closeErr != nil {
+		return nil, fmt.Errorf("close organizations cursor: %w", closeErr)
+	}
+
+	return items, nil
+}
+
+// CountByStatus returns organization counts grouped by status.
+func (s *Store) CountByStatus(ctx context.Context) (map[string]int64, error) {
+	pipeline := mongo.Pipeline{
+		{{Key: "$group", Value: bson.M{
+			"_id":   "$status",
+			"count": bson.M{"$sum": 1},
+		}}},
+	}
+
+	cursor, err := s.orgs.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, fmt.Errorf("aggregate organization counts: %w", err)
+	}
+
+	type statusCount struct {
+		Status string `bson:"_id"`
+		Count  int64  `bson:"count"`
+	}
+
+	counts := make([]statusCount, 0)
+	decodeErr := cursor.All(ctx, &counts)
+	closeErr := cursor.Close(ctx)
+
+	if decodeErr != nil && closeErr != nil {
+		return nil, errors.Join(
+			fmt.Errorf("decode organization counts: %w", decodeErr),
+			fmt.Errorf("close organization counts cursor: %w", closeErr),
+		)
+	}
+
+	if decodeErr != nil {
+		return nil, fmt.Errorf("decode organization counts: %w", decodeErr)
+	}
+
+	if closeErr != nil {
+		return nil, fmt.Errorf("close organization counts cursor: %w", closeErr)
+	}
+
+	out := make(map[string]int64, len(counts))
+	for _, item := range counts {
+		out[item.Status] = item.Count
+	}
+
+	return out, nil
+}
+
 // Update replaces an organization document.
 func (s *Store) Update(ctx context.Context, org Organization) error {
-	res, err := s.orgs.ReplaceOne(ctx, bson.M{"_id": org.ID}, org)
+	res, err := s.orgs.ReplaceOne(ctx, bson.M{fieldID: org.ID}, org)
 	if err != nil {
 		return fmt.Errorf("replace organization: %w", err)
 	}
@@ -135,9 +216,9 @@ func (s *Store) GetMembership(ctx context.Context, organizationID, userID string
 	var membership Membership
 
 	err := s.memberships.FindOne(ctx, bson.M{
-		"organizationId": organizationID,
-		fieldUserID:      userID,
-		"status":         membershipStatusActive,
+		fieldOrganizationID: organizationID,
+		fieldUserID:         userID,
+		"status":            membershipStatusActive,
 	}).Decode(&membership)
 	if errors.Is(err, mongo.ErrNoDocuments) {
 		return Membership{}, ErrNotFound

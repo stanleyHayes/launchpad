@@ -70,7 +70,7 @@ export default function HomePage() {
               title={me ? `Welcome, ${me.user.displayName}` : "Welcome"}
               description={
                 me
-                  ? `Track your onboarding journeys at ${me.organization.name}.`
+                  ? `Track your onboarding journeys at ${me.organization?.name ?? "your organization"}.`
                   : "Loading your profile…"
               }
               actions={

@@ -58,7 +58,7 @@ export function EmployeeShell({ children }: { children: ReactNode }) {
         router.push(href);
       }}
       groups={employeeNav}
-      orgLabel={me?.organization.name}
+      orgLabel={me?.organization?.name}
       userLabel={me ? `${me.user.displayName} · ${me.roleCode}` : "Loading…"}
       workspaceLabel="Employee workspace"
       onLogout={() => {

@@ -18,6 +18,8 @@ var (
 	ErrSessionInvalid = errors.New("session invalid")
 	// ErrAuditFailed indicates an audit write failed after a successful mutation.
 	ErrAuditFailed = errors.New("audit write failed")
+	// ErrPlatformStaffNotFound indicates the user is not platform staff.
+	ErrPlatformStaffNotFound = errors.New("platform staff not found")
 )
 
 const (

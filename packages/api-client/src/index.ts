@@ -38,13 +38,13 @@ export const tokenPairSchema = z.object({
 
 export const authResultSchema = z.object({
   user: userSchema,
-  organization: organizationSchema,
+  organization: organizationSchema.nullable(),
   tokens: tokenPairSchema,
 });
 
 export const meSchema = z.object({
   user: userSchema,
-  organization: organizationSchema,
+  organization: organizationSchema.nullable(),
   roleCode: z.string(),
   sessionId: z.string(),
 });
@@ -278,6 +278,53 @@ export type CompleteStepRequest = {
 export type DecideApprovalRequest = {
   approve: boolean;
   note?: string;
+};
+
+export const platformOverviewSchema = z.object({
+  totalOrgs: z.number().int(),
+  trialOrgs: z.number().int(),
+  activeOrgs: z.number().int(),
+  suspendedOrgs: z.number().int(),
+  totalLeads: z.number().int(),
+});
+
+export const leadSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  email: z.string().email(),
+  company: z.string(),
+  message: z.string(),
+  source: z.string(),
+  status: z.string(),
+  createdAt: z.string(),
+});
+
+export const organizationMembershipSchema = z.object({
+  id: z.string(),
+  organizationId: z.string(),
+  userId: z.string(),
+  roleCode: z.string(),
+  status: z.string(),
+  createdAt: z.string(),
+});
+
+export type PlatformOverview = z.infer<typeof platformOverviewSchema>;
+export type Lead = z.infer<typeof leadSchema>;
+export type OrganizationMembership = z.infer<typeof organizationMembershipSchema>;
+
+export type CreateLeadRequest = {
+  name: string;
+  email: string;
+  company?: string;
+  message?: string;
+  source?: string;
+};
+
+export type InviteMemberRequest = {
+  email: string;
+  displayName: string;
+  password: string;
+  roleCode?: string;
 };
 
 export type LaunchPadClientOptions = {
@@ -527,6 +574,60 @@ export function createLaunchPadClient(options: LaunchPadClientOptions) {
         { method: "POST" },
         notificationSchema,
       );
+    },
+
+    inviteOrganizationMember(payload: InviteMemberRequest): Promise<OrganizationMembership> {
+      return request("/api/v1/organizations/current/members", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }, organizationMembershipSchema);
+    },
+
+    createLead(payload: CreateLeadRequest): Promise<Lead> {
+      return request("/api/v1/leads", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }, leadSchema);
+    },
+
+    platformOverview(): Promise<PlatformOverview> {
+      return request("/api/v1/platform/overview", { method: "GET" }, platformOverviewSchema);
+    },
+
+    listPlatformOrganizations(): Promise<Organization[]> {
+      return request(
+        "/api/v1/platform/organizations",
+        { method: "GET" },
+        z.array(organizationSchema),
+      );
+    },
+
+    getPlatformOrganization(organizationId: string): Promise<Organization> {
+      return request(
+        `/api/v1/platform/organizations/${organizationId}`,
+        { method: "GET" },
+        organizationSchema,
+      );
+    },
+
+    suspendOrganization(organizationId: string): Promise<Organization> {
+      return request(
+        `/api/v1/platform/organizations/${organizationId}/suspend`,
+        { method: "POST" },
+        organizationSchema,
+      );
+    },
+
+    activateOrganization(organizationId: string): Promise<Organization> {
+      return request(
+        `/api/v1/platform/organizations/${organizationId}/activate`,
+        { method: "POST" },
+        organizationSchema,
+      );
+    },
+
+    listPlatformLeads(): Promise<Lead[]> {
+      return request("/api/v1/platform/leads", { method: "GET" }, z.array(leadSchema));
     },
   };
 }
