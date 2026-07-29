@@ -302,6 +302,98 @@
   box-shadow: var(--lp-shadow);
 }
 
+.lp-feature-card {
+  display: block;
+  overflow: hidden;
+  border-radius: clamp(1.25rem, 2vw, 1.75rem);
+  background: var(--lp-paper-elevated);
+  box-shadow:
+    -12px -12px 28px color-mix(in srgb, white 76%, transparent),
+    14px 16px 32px color-mix(in srgb, var(--lp-shadow-color, #7082a0) 24%, transparent);
+  transition:
+    transform 240ms ease,
+    box-shadow 240ms ease;
+}
+
+.lp-feature-card:hover {
+  transform: translateY(-5px);
+  box-shadow:
+    -14px -14px 30px color-mix(in srgb, white 82%, transparent),
+    18px 22px 38px color-mix(in srgb, var(--lp-shadow-color, #7082a0) 30%, transparent);
+}
+
+.lp-feature-card:active {
+  transform: translateY(-1px) scale(0.995);
+  box-shadow: var(--lp-shadow-inset);
+}
+
+.lp-feature-card:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--lp-brand) 42%, transparent);
+  outline-offset: 4px;
+}
+
+.lp-feature-card__media {
+  position: relative;
+  margin: 0.7rem;
+  overflow: hidden;
+  border-radius: calc(clamp(1.25rem, 2vw, 1.75rem) - 0.45rem);
+  background: var(--lp-paper);
+  box-shadow: var(--lp-shadow-inset);
+}
+
+.lp-feature-card__media .lp-evidence,
+.lp-feature-card__media .lp-evidence__frame {
+  height: 100%;
+}
+
+.lp-feature-card__media .lp-evidence__frame {
+  border: 0;
+  border-radius: inherit;
+  box-shadow: none;
+}
+
+.lp-feature-card__media img {
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  object-position: top;
+  transition: transform 500ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.lp-feature-card:hover .lp-feature-card__media img {
+  transform: scale(1.035);
+}
+
+.lp-feature-card__index {
+  position: absolute;
+  right: 0.8rem;
+  bottom: 0.8rem;
+  display: grid;
+  min-width: 2.5rem;
+  height: 2.25rem;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, white 52%, transparent);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--lp-paper-elevated) 82%, transparent);
+  box-shadow: var(--lp-shadow);
+  color: var(--lp-ink);
+  font-family: var(--lp-font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  backdrop-filter: blur(12px);
+}
+
+[data-lp-theme="glass"] .lp-feature-card {
+  border: 1px solid var(--lp-border);
+  background: var(--lp-paper-elevated);
+  box-shadow: var(--lp-shadow);
+  backdrop-filter: blur(16px);
+}
+
+[data-lp-theme="clay"] .lp-feature-card {
+  background: var(--lp-paper-elevated);
+  box-shadow: var(--lp-shadow);
+}
+
 .lp-input {
   height: 2.75rem;
   width: 100%;

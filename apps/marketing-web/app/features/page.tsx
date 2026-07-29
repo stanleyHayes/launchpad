@@ -30,25 +30,45 @@ export default function FeaturesPage() {
           <ProductEvidence kind="manager" priority caption={false} />
         </Container>
       </section>
-      <section className="py-24">
+      <section className="py-24 md:py-28">
         <Container>
-          <div className="grid gap-x-12 gap-y-16 md:grid-cols-2">
+          <div className="mb-12 max-w-2xl">
+            <p className="lp-eyebrow">Built into the workflow</p>
+            <h2 className="mt-5 text-3xl font-semibold tracking-tight md:text-5xl">
+              Every capability has an operating view.
+            </h2>
+            <p className="mt-4 text-lg leading-8 text-[var(--lp-ink-muted)]">
+              Explore the product through real LaunchPad screens, not feature claims alone.
+            </p>
+          </div>
+          <div className="grid gap-6 md:grid-cols-2">
             {featurePages.map((page, index) => (
-              <Link key={page.slug} href={`/features/${page.slug}`} className="group">
-                {index < 4 ? (
+              <Link
+                key={page.slug}
+                href={`/features/${page.slug}`}
+                className={`lp-feature-card group ${index % 3 === 0 ? "md:translate-y-6" : ""}`}
+              >
+                <div className="lp-feature-card__media">
                   <ProductEvidence
                     kind={evidenceForSlug(page.slug)}
                     caption={false}
-                    className="mb-6"
+                    className="h-full"
                   />
-                ) : null}
-                <div className="border-t border-[var(--lp-border)] pt-5">
-                  <h2 className="text-2xl font-semibold group-hover:text-[var(--lp-brand)]">
+                  <span className="lp-feature-card__index" aria-hidden="true">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                </div>
+                <div className="p-6 md:p-7">
+                  <h3 className="text-2xl font-semibold transition-colors group-hover:text-[var(--lp-brand)]">
                     {page.title}
-                  </h2>
+                  </h3>
                   <p className="mt-3 max-w-xl leading-7 text-[var(--lp-ink-muted)]">
                     {page.description}
                   </p>
+                  <span className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-[var(--lp-brand)]">
+                    Explore capability
+                    <span aria-hidden="true" className="transition-transform group-hover:translate-x-1">→</span>
+                  </span>
                 </div>
               </Link>
             ))}
