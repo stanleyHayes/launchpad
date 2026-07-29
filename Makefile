@@ -1,4 +1,4 @@
-.PHONY: help deps up down api test lint lint-fix marketing platform-admin org-admin employee migrate-indexes coverage
+.PHONY: help deps up down api test lint lint-fix marketing platform-admin org-admin employee migrate-indexes seed-demo coverage
 
 help:
 	@echo "LaunchPad targets:"
@@ -11,6 +11,7 @@ help:
 	@echo "  make platform-admin   Run platform admin on :3001"
 	@echo "  make org-admin        Run organization admin on :3002"
 	@echo "  make employee         Run employee portal on :3003"
+	@echo "  make seed-demo        Seed a local organization and exploratory demo data"
 	@echo "  make test             Run Go tests"
 	@echo "  make coverage         Run Go tests with coverage.out"
 	@echo "  make lint             Run golangci-lint (all enabled linters)"
@@ -28,6 +29,9 @@ down:
 
 migrate-indexes:
 	go run ./scripts/migrate_indexes
+
+seed-demo:
+	node ./scripts/seed-demo.mjs
 
 api:
 	go run ./apps/api/cmd/api
