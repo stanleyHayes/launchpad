@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition, type SyntheticEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { SupportTicket } from "@launchpad/api-client";
 import { ApiError } from "@launchpad/api-client";
-import { EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
+import { Select, EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
 import { getClient } from "@/lib/api";
 import { clearSession, getAccessToken } from "@/lib/session";
 
@@ -129,18 +129,18 @@ export default function SupportPage() {
           <form className="mt-4 grid gap-3" onSubmit={onCreate}>
             <input className="lp-input" name="subject" placeholder="Subject" required />
             <div className="grid gap-3 sm:grid-cols-2">
-              <select className="lp-input" name="category" defaultValue="other">
+              <Select className="lp-input" name="category" defaultValue="other">
                 <option value="hr">HR & benefits</option>
                 <option value="it">IT & equipment</option>
                 <option value="manager">Manager</option>
                 <option value="other">Other</option>
-              </select>
-              <select className="lp-input" name="priority" defaultValue="normal">
+              </Select>
+              <Select className="lp-input" name="priority" defaultValue="normal">
                 <option value="low">Low priority</option>
                 <option value="normal">Normal priority</option>
                 <option value="high">High priority</option>
                 <option value="urgent">Urgent</option>
-              </select>
+              </Select>
             </div>
             <textarea
               className="lp-input min-h-24 resize-y"

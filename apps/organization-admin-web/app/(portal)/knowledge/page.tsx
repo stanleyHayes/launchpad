@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition, type SyntheticEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { KnowledgeDocument, KnowledgeSource } from "@launchpad/api-client";
 import { ApiError } from "@launchpad/api-client";
-import { EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
+import { Select, EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
 import { getClient } from "@/lib/api";
 import { clearSession, getAccessToken } from "@/lib/session";
 
@@ -174,17 +174,17 @@ export default function KnowledgePage() {
           <form className="mt-4 grid gap-3" onSubmit={onCreate}>
             <input className="lp-input" name="title" placeholder="Title" required />
             <div className="grid gap-3 sm:grid-cols-2">
-              <select className="lp-input" name="source" defaultValue="manual">
+              <Select className="lp-input" name="source" defaultValue="manual">
                 {sourceOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
                 ))}
-              </select>
-              <select className="lp-input" name="accessScope" defaultValue="organization">
+              </Select>
+              <Select className="lp-input" name="accessScope" defaultValue="organization">
                 <option value="organization">Whole organization</option>
                 <option value="restricted">Managers only</option>
-              </select>
+              </Select>
             </div>
             <input
               className="lp-input"

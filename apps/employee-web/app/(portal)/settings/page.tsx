@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition, type SyntheticEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { Employee, MeResponse, UserPreferences } from "@launchpad/api-client";
 import { ApiError } from "@launchpad/api-client";
-import {
+import { Select,
   Icon,
   InitialsAvatar,
   PageHeader,
@@ -198,15 +198,15 @@ export default function SettingsPage() {
               <ToggleSwitch label="Email notifications" checked={preferences.emailNotifications} onChange={(emailNotifications) => setPreferences({ ...preferences, emailNotifications })} />
             </div>
             <label className="text-sm font-semibold">Email digest
-              <select className="lp-input mt-1.5" name="digestFrequency" defaultValue={preferences.digestFrequency}>
+              <Select className="lp-input mt-1.5" name="digestFrequency" defaultValue={preferences.digestFrequency}>
                 <option value="instant">As updates happen</option><option value="daily">Daily digest</option><option value="weekly">Weekly digest</option><option value="off">No digest</option>
-              </select>
+              </Select>
             </label>
             <label className="text-sm font-semibold">Language
-              <select className="lp-input mt-1.5" name="locale" defaultValue={preferences.locale}><option value="en">English</option><option value="fr">Français</option></select>
+              <Select className="lp-input mt-1.5" name="locale" defaultValue={preferences.locale}><option value="en">English</option><option value="fr">Français</option></Select>
             </label>
             <label className="text-sm font-semibold sm:col-span-2">Timezone
-              <select className="lp-input mt-1.5" name="timezone" defaultValue={preferences.timezone}>{timezones.map((timezone) => <option key={timezone}>{timezone}</option>)}</select>
+              <Select className="lp-input mt-1.5" name="timezone" defaultValue={preferences.timezone}>{timezones.map((timezone) => <option key={timezone}>{timezone}</option>)}</Select>
             </label>
             <button className="lp-btn lp-btn--primary sm:w-fit" disabled={pending}>{pending ? "Saving…" : "Save preferences"}</button>
           </form>

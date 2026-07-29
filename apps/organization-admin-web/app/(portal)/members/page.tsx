@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { MeResponse, Member, Role } from "@launchpad/api-client";
 import { ApiError } from "@launchpad/api-client";
-import { EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
+import { Select, EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
 import { getClient } from "@/lib/api";
 import { clearSession, getAccessToken } from "@/lib/session";
 
@@ -155,7 +155,7 @@ export default function MembersPage() {
                       </div>
                       <label className="flex items-center gap-2 text-sm text-[var(--lp-ink-muted)]">
                         Role
-                        <select
+                        <Select
                           className="lp-input"
                           value={member.roleCode}
                           disabled={pending || isSelf}
@@ -172,7 +172,7 @@ export default function MembersPage() {
                               {roleLabel(role.name)}
                             </option>
                           ))}
-                        </select>
+                        </Select>
                       </label>
                     </li>
                   );

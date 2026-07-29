@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { AssignmentRule, Department, JobRole, JourneyTemplate } from "@launchpad/api-client";
 import { ApiError } from "@launchpad/api-client";
-import { EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
+import { Select, EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
 import { getClient } from "@/lib/api";
 import { clearSession, getAccessToken } from "@/lib/session";
 
@@ -172,7 +172,7 @@ export default function AssignmentRulesPage() {
           </p>
           <form onSubmit={onCreateRule} className="mt-4 grid gap-3 md:grid-cols-2">
             <input className="lp-input" name="name" placeholder="Engineering onboarding" required />
-            <select className="lp-input" name="journeyTemplateId" defaultValue="" required>
+            <Select className="lp-input" name="journeyTemplateId" defaultValue="" required>
               <option value="" disabled>
                 Select a published journey…
               </option>
@@ -181,23 +181,23 @@ export default function AssignmentRulesPage() {
                   {journey.name}
                 </option>
               ))}
-            </select>
-            <select className="lp-input" name="departmentId" defaultValue="">
+            </Select>
+            <Select className="lp-input" name="departmentId" defaultValue="">
               <option value="">All departments</option>
               {departments.map((department) => (
                 <option key={department.id} value={department.id}>
                   {department.name}
                 </option>
               ))}
-            </select>
-            <select className="lp-input" name="jobRoleId" defaultValue="">
+            </Select>
+            <Select className="lp-input" name="jobRoleId" defaultValue="">
               <option value="">All job roles</option>
               {jobRoles.map((role) => (
                 <option key={role.id} value={role.id}>
                   {role.name}
                 </option>
               ))}
-            </select>
+            </Select>
             <div>
               <button
                 type="submit"

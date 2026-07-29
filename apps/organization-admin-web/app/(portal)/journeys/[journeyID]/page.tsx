@@ -12,7 +12,7 @@ import type {
   JourneyVersionSummary,
 } from "@launchpad/api-client";
 import { ApiError } from "@launchpad/api-client";
-import { EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
+import { Select, EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
 import { getClient } from "@/lib/api";
 import { clearSession, getAccessToken } from "@/lib/session";
 
@@ -314,7 +314,7 @@ export default function JourneyDetailPage() {
                 Build the journey from content, submissions, sessions, approvals, requests, and assessments.
               </p>
               <form onSubmit={onAddStep} className="mt-4 grid gap-3 md:grid-cols-2">
-                <select
+                <Select
                   className="lp-input"
                   name="stepType"
                   value={stepType}
@@ -345,7 +345,7 @@ export default function JourneyDetailPage() {
                   <option value="employee_reflection">Employee reflection</option>
                   <option value="certification">Certification</option>
                   <option value="meeting">Meeting</option>
-                </select>
+                </Select>
                 <input className="lp-input" name="title" placeholder="Step title" required />
                 <input
                   className="lp-input md:col-span-2"
@@ -376,7 +376,7 @@ export default function JourneyDetailPage() {
                         first.
                       </p>
                     ) : (
-                      <select
+                      <Select
                         className="lp-input"
                         value={stepAssessmentId}
                         onChange={(event) => {
@@ -392,7 +392,7 @@ export default function JourneyDetailPage() {
                             {assessment.title} (pass at {assessment.passingScore}%)
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     )}
                     <p className="text-sm text-[var(--lp-ink-muted)]">
                       The step completes when the employee&apos;s latest attempt passes.
@@ -536,7 +536,7 @@ export default function JourneyDetailPage() {
                 who already has it is skipped, so it is safe to re-run.
               </p>
               <form onSubmit={onAssignDepartment} className="mt-4 grid gap-3 md:grid-cols-2">
-                <select className="lp-input" name="departmentId" required defaultValue="">
+                <Select className="lp-input" name="departmentId" required defaultValue="">
                   <option value="" disabled>
                     Choose a department
                   </option>
@@ -545,7 +545,7 @@ export default function JourneyDetailPage() {
                       {department.name}
                     </option>
                   ))}
-                </select>
+                </Select>
                 <input className="lp-input" name="startsAt" type="date" />
                 <button
                   type="submit"

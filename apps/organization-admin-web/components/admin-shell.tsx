@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import type { MeResponse, OrganizationChoice } from "@launchpad/api-client";
 import { ApiError } from "@launchpad/api-client";
-import { Button, PortalShell, type IconName, type NavGroup } from "@launchpad/ui";
+import { Select, Button, PortalShell, type IconName, type NavGroup } from "@launchpad/ui";
 import { getClient } from "@/lib/api";
 import { clearSession, getAccessToken } from "@/lib/session";
 
@@ -208,7 +208,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
         organizations.length > 1 ? (
           <label>
             <span className="sr-only">Switch organization</span>
-            <select
+            <Select
               aria-label="Switch organization"
               disabled={switching}
               value={me?.organization?.id ?? ""}
@@ -222,7 +222,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
                   {choice.organization.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         ) : undefined
       }

@@ -2,7 +2,7 @@
 
 import { useState, type SyntheticEvent } from "react";
 import type { BlockerCategory, StepAssignment } from "@launchpad/api-client";
-import { Button, cn } from "@launchpad/ui";
+import { Select, Button, cn } from "@launchpad/ui";
 import { formatStatus } from "./status";
 
 const PASSING_SCORE = 70;
@@ -253,13 +253,13 @@ export function StepCard({
         <form onSubmit={onSubmit} className="mt-4 space-y-3">
           <label className="block text-sm font-semibold">
             What do you need?
-            <select className="lp-input mt-1.5" name="item">
+            <Select className="lp-input mt-1.5" name="item">
               {(requestStepItems[step.stepType] ?? []).map((item) => (
                 <option key={item.value} value={item.value}>
                   {item.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="block text-sm font-semibold">
             Notes (optional)
@@ -279,13 +279,13 @@ export function StepCard({
         <form onSubmit={onSubmit} className="mt-4 space-y-3">
           <label className="block text-sm font-semibold">
             Meeting type
-            <select className="lp-input mt-1.5" name="meetingType">
+            <Select className="lp-input mt-1.5" name="meetingType">
               {meetingStepTypes.map((meetingType) => (
                 <option key={meetingType.value} value={meetingType.value}>
                   {meetingType.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block text-sm font-semibold">
@@ -389,13 +389,13 @@ export function StepCard({
           <form onSubmit={onBlockerSubmit} className="mt-2 space-y-3">
             <label className="block text-sm font-semibold">
               Category
-              <select name="category" className="lp-input mt-1.5" defaultValue="hr">
+              <Select name="category" className="lp-input mt-1.5" defaultValue="hr">
                 {blockerCategories.map((category) => (
                   <option key={category.value} value={category.value}>
                     {category.label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="block text-sm font-semibold">
               What is blocking you?

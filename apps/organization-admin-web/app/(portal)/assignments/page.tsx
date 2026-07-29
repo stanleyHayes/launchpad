@@ -4,7 +4,7 @@ import { useEffect, useState, type SyntheticEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { JourneyAssignment, StepAssignment } from "@launchpad/api-client";
 import { ApiError } from "@launchpad/api-client";
-import { EmptyState, PageHeader, Surface } from "@launchpad/ui";
+import { Select, EmptyState, PageHeader, Surface } from "@launchpad/ui";
 import { getClient } from "@/lib/api";
 import { clearSession, getAccessToken } from "@/lib/session";
 
@@ -95,9 +95,9 @@ export default function AssignmentsPage() {
                     <div><p className="font-medium">{step.title}</p><p className="text-xs text-[var(--lp-ink-muted)]">{step.stage || "Journey"} · {step.status}{step.maxAttempts ? ` · ${step.attemptCount ?? 0}/${step.maxAttempts} attempts` : ""}</p></div>
                   </div>
                   <form className="mt-3 grid gap-2 sm:grid-cols-[8rem_1fr_auto]" onSubmit={(event) => void override(event, step)}>
-                    <select className="lp-input" name="action" defaultValue={step.status === "blocked" ? "reopen" : "complete"}>
+                    <Select className="lp-input" name="action" defaultValue={step.status === "blocked" ? "reopen" : "complete"}>
                       <option value="complete">Complete</option><option value="skip">Skip</option><option value="reopen">Reopen</option>
-                    </select>
+                    </Select>
                     <input className="lp-input" name="reason" placeholder="Required audit reason" required />
                     <button className="lp-btn lp-btn--secondary" type="submit">Apply</button>
                   </form>

@@ -11,7 +11,7 @@ import type {
   AssessmentQuestionType,
 } from "@launchpad/api-client";
 import { ApiError } from "@launchpad/api-client";
-import { EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
+import { Select, EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
 import { getClient } from "@/lib/api";
 import { clearSession, getAccessToken } from "@/lib/session";
 
@@ -383,7 +383,7 @@ export default function AssessmentDetailPage() {
                       className="space-y-2 rounded-[var(--lp-radius)] border border-[var(--lp-border)] p-3"
                     >
                       <div className="flex flex-wrap gap-2">
-                        <select
+                        <Select
                           className="lp-input w-auto"
                           value={question.type}
                           onChange={(event) => {
@@ -405,7 +405,7 @@ export default function AssessmentDetailPage() {
                               {option.label}
                             </option>
                           ))}
-                        </select>
+                        </Select>
                         <input
                           className="lp-input min-w-0 flex-1"
                           placeholder={`Question ${String(questionIndex + 1)}`}

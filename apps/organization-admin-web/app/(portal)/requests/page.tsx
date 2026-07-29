@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { Employee, OrgRequest, OrgRequestStatus } from "@launchpad/api-client";
 import { ApiError } from "@launchpad/api-client";
-import { EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
+import { Select, EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
 import { getClient } from "@/lib/api";
 import { clearSession, getAccessToken } from "@/lib/session";
 
@@ -245,7 +245,7 @@ export default function RequestsPage() {
               <h2 className="text-lg font-semibold">All requests</h2>
               <p className="text-sm text-[var(--lp-ink-muted)]">{requests.length} requests</p>
             </div>
-            <select
+            <Select
               className="lp-input w-auto"
               value={statusFilter}
               onChange={(event) => {
@@ -257,7 +257,7 @@ export default function RequestsPage() {
                   {filter.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           {loaded && requests.length === 0 ? (
             <div className="p-5">

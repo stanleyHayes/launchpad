@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition, type SyntheticEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { Coupon, Invoice, Plan, Subscription } from "@launchpad/api-client";
 import { ApiError } from "@launchpad/api-client";
-import { EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
+import { Select, EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
 import { getClient } from "@/lib/api";
 import { clearSession, getAccessToken } from "@/lib/session";
 
@@ -176,7 +176,7 @@ export default function BillingPage() {
                 placeholder="Organization ID"
                 required
               />
-              <select className="lp-input" name="planCode" required defaultValue="">
+              <Select className="lp-input" name="planCode" required defaultValue="">
                 <option value="" disabled>
                   Select plan
                 </option>
@@ -185,14 +185,14 @@ export default function BillingPage() {
                     {plan.name} ({plan.code})
                   </option>
                 ))}
-              </select>
-              <select className="lp-input" name="status" defaultValue="">
+              </Select>
+              <Select className="lp-input" name="status" defaultValue="">
                 <option value="">Default status</option>
                 <option value="trialing">Trialing</option>
                 <option value="active">Active</option>
                 <option value="past_due">Past due</option>
                 <option value="canceled">Canceled</option>
-              </select>
+              </Select>
               <div className="md:col-span-3">
                 <button
                   type="submit"

@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState, useTransition, type SyntheticEvent } from "react";
+import { useEffect, useRef, useState, useTransition, type SyntheticEvent } from "react";
 import { useRouter } from "next/navigation";
-import type { MarketplaceTemplate } from "@launchpad/api-client";
+import type { MarketplaceStep, MarketplaceTemplate } from "@launchpad/api-client";
 import { ApiError } from "@launchpad/api-client";
-import { EmptyState, IconWatermark, PageHeader, Reveal, Surface } from "@launchpad/ui";
+import { Select, EmptyState, IconWatermark, PageHeader, Reveal, Surface } from "@launchpad/ui";
 import { getClient } from "@/lib/api";
 import { clearSession, getAccessToken } from "@/lib/session";
 
@@ -38,6 +38,30 @@ function MarketplaceSkeleton() {
   );
 }
 
+type DraftStep = MarketplaceStep & { id: string };
+
+const stepTypes = [
+  ["task", "Task"],
+  ["document", "Document"],
+  ["meeting", "Meeting"],
+  ["approval", "Approval"],
+  ["quiz", "Knowledge check"],
+  ["assessment", "Assessment"],
+  ["access_request", "Access request"],
+  ["equipment_request", "Equipment request"],
+] as const;
+
+function emptyStep(id: string): DraftStep {
+  return {
+    id,
+    stepType: "task",
+    title: "",
+    instructions: "",
+    dueOffsetDays: 0,
+    config: {},
+  };
+}
+
 export default function MarketplacePage() {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -48,6 +72,8 @@ export default function MarketplacePage() {
   const [page, setPage] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [steps, setSteps] = useState<DraftStep[]>([emptyStep("step-1")]);
+  const nextStepID = useRef(2);
 
   function load() {
     setLoading(true);
@@ -121,17 +147,43 @@ export default function MarketplacePage() {
       void getClient().submitMarketplaceTemplate({
         name: read("name"), description: read("description"), category: read("category"),
         priceCents, currency: read("currency") || "USD",
-        steps: [{
-          stepType: "task", title: read("stepTitle"), instructions: read("instructions"),
-          dueOffsetDays: Number(read("dueOffsetDays") || "0"), config: {},
-        }],
+        steps: steps.map((step) => ({
+          stepType: step.stepType,
+          title: step.title,
+          instructions: step.instructions,
+          dueOffsetDays: step.dueOffsetDays,
+          config: step.config,
+        })),
       }).then(() => {
         element.reset();
         setPaid(false);
+        setSteps([emptyStep(`step-${nextStepID.current++}`)]);
         setMessage("Template submitted for marketplace review");
         load();
       }).catch((err: unknown) => setError(err instanceof ApiError ? err.message : "Unable to submit template"));
     });
+  }
+
+  function updateStep(id: string, patch: Partial<MarketplaceStep>) {
+    setSteps((current) => current.map((step) => (
+      step.id === id ? { ...step, ...patch } : step
+    )));
+  }
+
+  function moveStep(index: number, direction: -1 | 1) {
+    setSteps((current) => {
+      const destination = index + direction;
+      if (destination < 0 || destination >= current.length) return current;
+      const next = [...current];
+      [next[index], next[destination]] = [next[destination], next[index]];
+      return next;
+    });
+  }
+
+  function removeStep(id: string) {
+    setSteps((current) => (
+      current.length === 1 ? current : current.filter((step) => step.id !== id)
+    ));
   }
 
   return (
@@ -180,18 +232,135 @@ export default function MarketplacePage() {
               <label className="text-sm font-semibold md:col-span-2">Description
                 <textarea className="lp-input mt-1.5 min-h-24" name="description" placeholder="What this template helps a team achieve…" required />
               </label>
-              <label className="text-sm font-semibold">First step
-                <input className="lp-input mt-1.5" name="stepTitle" placeholder="Meet your manager" required />
-              </label>
-              <label className="text-sm font-semibold">Due after
-                <div className="relative">
-                  <input className="lp-input mt-1.5" name="dueOffsetDays" type="number" min="0" defaultValue="0" required />
-                  <span className="pointer-events-none absolute right-3 top-4 text-xs text-[var(--lp-ink-muted)]">days</span>
+              <section className="space-y-3 md:col-span-2" aria-labelledby="template-steps-title">
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                  <div>
+                    <p className="lp-eyebrow">Journey builder</p>
+                    <h3 id="template-steps-title" className="mt-1 text-lg font-semibold">
+                      Build the template
+                    </h3>
+                    <p className="mt-1 text-sm text-[var(--lp-ink-muted)]">
+                      Add the ordered steps buyers receive when they install this template.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="lp-btn lp-btn--secondary"
+                    onClick={() => setSteps((current) => [
+                      ...current,
+                      emptyStep(`step-${nextStepID.current++}`),
+                    ])}
+                  >
+                    Add step
+                  </button>
                 </div>
-              </label>
-              <label className="text-sm font-semibold md:col-span-2">Instructions
-                <input className="lp-input mt-1.5" name="instructions" placeholder="Explain what success looks like" required />
-              </label>
+
+                <ol className="space-y-3">
+                  {steps.map((step, index) => (
+                    <li
+                      key={step.id}
+                      className="rounded-[var(--lp-radius)] bg-[var(--lp-paper)] p-4 shadow-[var(--lp-shadow-inset)]"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span className="grid size-8 shrink-0 place-items-center rounded-[var(--lp-radius-input)] bg-[var(--lp-accent)] text-sm font-bold text-white">
+                            {index + 1}
+                          </span>
+                          <p className="truncate font-semibold">
+                            {step.title || `Untitled ${stepTypes.find(([value]) => value === step.stepType)?.[1].toLowerCase()}`}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          <button
+                            type="button"
+                            className="lp-btn lp-btn--quiet !px-2.5"
+                            disabled={index === 0}
+                            aria-label={`Move step ${index + 1} up`}
+                            onClick={() => moveStep(index, -1)}
+                          >
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            className="lp-btn lp-btn--quiet !px-2.5"
+                            disabled={index === steps.length - 1}
+                            aria-label={`Move step ${index + 1} down`}
+                            onClick={() => moveStep(index, 1)}
+                          >
+                            ↓
+                          </button>
+                          <button
+                            type="button"
+                            className="lp-btn lp-btn--quiet !px-2.5 text-[var(--lp-danger)]"
+                            disabled={steps.length === 1}
+                            aria-label={`Remove step ${index + 1}`}
+                            onClick={() => removeStep(step.id)}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                      <div className="mt-4 grid gap-3 md:grid-cols-[.7fr_1.3fr]">
+                        <label className="text-sm font-semibold">
+                          Step type
+                          <Select
+                            className="mt-1.5"
+                            value={step.stepType}
+                            onChange={(event) => updateStep(step.id, { stepType: event.target.value })}
+                          >
+                            {stepTypes.map(([value, label]) => (
+                              <option key={value} value={value}>{label}</option>
+                            ))}
+                          </Select>
+                        </label>
+                        <label className="text-sm font-semibold">
+                          Step title
+                          <input
+                            className="lp-input mt-1.5"
+                            value={step.title}
+                            onChange={(event) => updateStep(step.id, { title: event.target.value })}
+                            placeholder="Meet your manager"
+                            required
+                          />
+                        </label>
+                        <label className="text-sm font-semibold md:col-span-2">
+                          Instructions
+                          <textarea
+                            className="lp-input mt-1.5 min-h-20"
+                            value={step.instructions}
+                            onChange={(event) => updateStep(step.id, { instructions: event.target.value })}
+                            placeholder="Explain what the employee needs to do and what completion looks like."
+                            required
+                          />
+                        </label>
+                        <label className="text-sm font-semibold">
+                          Due after
+                          <div className="relative">
+                            <input
+                              className="lp-input mt-1.5"
+                              value={step.dueOffsetDays}
+                              onChange={(event) => updateStep(step.id, {
+                                dueOffsetDays: Math.max(0, Number(event.target.value)),
+                              })}
+                              type="number"
+                              min="0"
+                              required
+                            />
+                            <span className="pointer-events-none absolute right-3 top-4 text-xs text-[var(--lp-ink-muted)]">
+                              days
+                            </span>
+                          </div>
+                        </label>
+                        <div className="self-end pb-2 text-xs leading-5 text-[var(--lp-ink-muted)]">
+                          Step {index + 1} runs {step.dueOffsetDays === 0
+                            ? "on day one"
+                            : `${step.dueOffsetDays} days after the journey starts`}.
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              </section>
 
               <fieldset className="md:col-span-2">
                 <legend className="text-sm font-semibold">Distribution</legend>
@@ -213,12 +382,12 @@ export default function MarketplacePage() {
                     <input className="lp-input mt-1.5" name="price" type="number" min="1" step=".01" placeholder="49.00" required />
                   </label>
                   <label className="text-sm font-semibold">Currency
-                    <select className="lp-input mt-1.5" name="currency" defaultValue="USD">
+                    <Select className="lp-input mt-1.5" name="currency" defaultValue="USD">
                       <option value="USD">USD</option>
                       <option value="GHS">GHS</option>
                       <option value="NGN">NGN</option>
                       <option value="GBP">GBP</option>
-                    </select>
+                    </Select>
                   </label>
                 </>
               ) : null}

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Organization, SupportSessionCreated } from "@launchpad/api-client";
 import { ApiError } from "@launchpad/api-client";
-import { EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
+import { Select, EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
 import { getClient } from "@/lib/api";
 import { clearSession, getAccessToken } from "@/lib/session";
 
@@ -236,7 +236,7 @@ export default function OrganizationsPage() {
                 </label>
                 <label className="text-sm font-medium">
                   Status
-                  <select
+                  <Select
                     value={statusFilter}
                     onChange={(event) => setStatusFilter(event.target.value)}
                     className="mt-1.5 block w-full rounded-[var(--lp-radius)] border border-[var(--lp-border)] bg-[var(--lp-surface)] px-3 py-2"
@@ -246,7 +246,7 @@ export default function OrganizationsPage() {
                     <option value="active">Active</option>
                     <option value="suspended">Suspended</option>
                     <option value="closed">Closed</option>
-                  </select>
+                  </Select>
                 </label>
                 <label className="text-sm font-medium">
                   Plan

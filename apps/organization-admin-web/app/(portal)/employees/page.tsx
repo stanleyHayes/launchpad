@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition, type SyntheticEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { Department, Employee, Invitation, JobRole, JourneyTemplate } from "@launchpad/api-client";
 import { ApiError } from "@launchpad/api-client";
-import { EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
+import { Select, EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
 import { getClient } from "@/lib/api";
 import { clearSession, getAccessToken } from "@/lib/session";
 
@@ -345,30 +345,30 @@ export default function EmployeesPage() {
               <input className="lp-input" name="team" placeholder="Team" />
               <input className="lp-input" name="location" placeholder="Location" />
               <input className="lp-input" name="startDate" type="date" required />
-              <select className="lp-input" name="departmentId" defaultValue="">
+              <Select className="lp-input" name="departmentId" defaultValue="">
                 <option value="">No department</option>
                 {departments.map((department) => (
                   <option key={department.id} value={department.id}>
                     {department.name}
                   </option>
                 ))}
-              </select>
-              <select className="lp-input" name="jobRoleId" defaultValue="">
+              </Select>
+              <Select className="lp-input" name="jobRoleId" defaultValue="">
                 <option value="">No job role</option>
                 {jobRoles.map((role) => (
                   <option key={role.id} value={role.id}>
                     {role.name}
                   </option>
                 ))}
-              </select>
-              <select className="lp-input" name="buddyEmployeeId" defaultValue="">
+              </Select>
+              <Select className="lp-input" name="buddyEmployeeId" defaultValue="">
                 <option value="">No buddy</option>
                 {employees.map((employee) => (
                   <option key={employee.id} value={employee.id}>
                     {employee.firstName} {employee.lastName}
                   </option>
                 ))}
-              </select>
+              </Select>
               <button
                 type="submit"
                 disabled={pending}
@@ -397,7 +397,7 @@ export default function EmployeesPage() {
           <Surface>
             <h2 className="text-lg font-semibold">Provision portal access</h2>
             <form onSubmit={onProvision} className="mt-4 space-y-3">
-              <select className="lp-input" name="employeeId" required defaultValue="">
+              <Select className="lp-input" name="employeeId" required defaultValue="">
                 <option value="" disabled>
                   Select employee
                 </option>
@@ -408,7 +408,7 @@ export default function EmployeesPage() {
                       {employee.firstName} {employee.lastName} · {employee.workEmail}
                     </option>
                   ))}
-              </select>
+              </Select>
               <input
                 className="lp-input"
                 name="password"
@@ -429,7 +429,7 @@ export default function EmployeesPage() {
           <Surface>
             <h2 className="text-lg font-semibold">Assign journey</h2>
             <form onSubmit={onAssign} className="mt-4 space-y-3">
-              <select className="lp-input" name="employeeId" required defaultValue="">
+              <Select className="lp-input" name="employeeId" required defaultValue="">
                 <option value="" disabled>
                   Select employee
                 </option>
@@ -438,8 +438,8 @@ export default function EmployeesPage() {
                     {employee.firstName} {employee.lastName}
                   </option>
                 ))}
-              </select>
-              <select className="lp-input" name="journeyTemplateId" required defaultValue="">
+              </Select>
+              <Select className="lp-input" name="journeyTemplateId" required defaultValue="">
                 <option value="" disabled>
                   Select published journey
                 </option>
@@ -448,7 +448,7 @@ export default function EmployeesPage() {
                     {journey.name}
                   </option>
                 ))}
-              </select>
+              </Select>
               <button
                 type="submit"
                 disabled={pending}
@@ -523,23 +523,23 @@ export default function EmployeesPage() {
                         <input className="lp-input" name="team" defaultValue={employee.team ?? ""} placeholder="Team" />
                         <input className="lp-input" name="mobilePhone" type="tel" defaultValue={employee.mobilePhone ?? ""} placeholder="Mobile phone (+233…)" />
                         <input className="lp-input" name="location" defaultValue={employee.location ?? ""} placeholder="Location" />
-                        <select className="lp-input" name="departmentId" defaultValue={employee.departmentId ?? ""}>
+                        <Select className="lp-input" name="departmentId" defaultValue={employee.departmentId ?? ""}>
                           <option value="">No department</option>
                           {departments.map((department) => (
                             <option key={department.id} value={department.id}>
                               {department.name}
                             </option>
                           ))}
-                        </select>
-                        <select className="lp-input" name="jobRoleId" defaultValue={employee.jobRoleId ?? ""}>
+                        </Select>
+                        <Select className="lp-input" name="jobRoleId" defaultValue={employee.jobRoleId ?? ""}>
                           <option value="">No job role</option>
                           {jobRoles.map((role) => (
                             <option key={role.id} value={role.id}>
                               {role.name}
                             </option>
                           ))}
-                        </select>
-                        <select
+                        </Select>
+                        <Select
                           className="lp-input"
                           name="buddyEmployeeId"
                           defaultValue={employee.buddyEmployeeId ?? ""}
@@ -552,7 +552,7 @@ export default function EmployeesPage() {
                                 {buddy.firstName} {buddy.lastName}
                               </option>
                             ))}
-                        </select>
+                        </Select>
                         <button
                           type="submit"
                           disabled={pending}

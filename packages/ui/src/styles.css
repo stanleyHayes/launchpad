@@ -437,6 +437,117 @@
   color: var(--lp-ink);
 }
 
+.lp-select {
+  position: relative;
+  min-width: 0;
+}
+
+.lp-select__trigger {
+  display: flex;
+  width: 100%;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border: 0;
+  border-radius: var(--lp-radius-input);
+  background: var(--lp-paper);
+  padding: 0.7rem 0.9rem;
+  color: var(--lp-ink);
+  text-align: left;
+  box-shadow: var(--lp-shadow-inset);
+  transition: box-shadow 180ms ease, transform 180ms ease;
+}
+
+.lp-select__trigger:hover:not(:disabled) {
+  box-shadow: var(--lp-shadow-inset), 0 0 0 1px color-mix(in srgb, var(--lp-accent) 24%, transparent);
+}
+
+.lp-select__trigger:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--lp-accent) 32%, transparent);
+  outline-offset: 2px;
+}
+
+.lp-select__trigger:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.lp-select__trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.lp-select__chevron {
+  width: 1rem;
+  flex: 0 0 auto;
+  transition: transform 180ms ease;
+}
+
+.lp-select__trigger[aria-expanded="true"] .lp-select__chevron {
+  transform: rotate(180deg);
+}
+
+.lp-select__menu {
+  position: fixed;
+  z-index: 100;
+  max-height: 18rem;
+  overflow-y: auto;
+  border: 1px solid color-mix(in srgb, var(--lp-border) 78%, white);
+  border-radius: var(--lp-radius);
+  background: color-mix(in srgb, var(--lp-paper-elevated) 94%, white);
+  padding: 0.4rem;
+  box-shadow: var(--lp-shadow);
+  backdrop-filter: blur(18px);
+  animation: lp-select-enter 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.lp-select__option {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 0;
+  border-radius: calc(var(--lp-radius-input) - 2px);
+  background: transparent;
+  padding: 0.68rem 0.75rem;
+  color: var(--lp-ink);
+  text-align: left;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.lp-select__option:hover:not(:disabled),
+.lp-select__option[aria-selected="true"] {
+  background: color-mix(in srgb, var(--lp-accent) 12%, var(--lp-paper-elevated));
+  color: var(--lp-accent);
+}
+
+.lp-select__option:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--lp-accent) 40%, transparent);
+  outline-offset: -2px;
+}
+
+.lp-select__option:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.lp-select__option svg {
+  width: 1rem;
+  flex: 0 0 auto;
+}
+
+@keyframes lp-select-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-0.35rem) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .lp-input:focus-visible {
   outline: none;
   border-color: var(--lp-brand);

@@ -21,5 +21,6 @@ export { LogoWatermark } from "./logo-watermark";
 export { UserMenu, InitialsAvatar, type UserMenuItem, type UserMenuUser } from "./user-menu";
 export { ThemeTiles } from "./theme-tiles";
 export { ToggleSwitch } from "./toggle-switch";
+export { Select, type SelectProps } from "./select";
 export { brandCssVars, type OrgBranding } from "./brand";
 export { cn } from "./cn";

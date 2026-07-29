@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { CMSPage } from "@launchpad/api-client";
 import { ApiError } from "@launchpad/api-client";
-import { EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
+import { Select, EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
 import { getClient } from "@/lib/api";
 import { clearSession, getAccessToken } from "@/lib/session";
 import { SiteInformationEditor } from "./site-information-editor";
@@ -142,7 +142,7 @@ export default function CMSPagesPage() {
                 onChange={(event) => setSlug(event.target.value)}
                 required
               />
-              <select
+              <Select
                 className="rounded-[var(--lp-radius)] border border-[var(--lp-border)] bg-transparent px-3 py-2"
                 value={contentType}
                 onChange={(event) => setContentType(event.target.value as typeof contentType)}
@@ -151,7 +151,7 @@ export default function CMSPagesPage() {
                 <option value="blog">Blog post</option>
                 <option value="faq">FAQ</option>
                 <option value="legal">Legal page</option>
-              </select>
+              </Select>
               <div className="grid gap-3 sm:grid-cols-2">
                 <input className="lp-input" placeholder="Navigation label (optional)" value={navLabel} onChange={(event) => setNavLabel(event.target.value)} />
                 <input className="lp-input" type="number" min="0" placeholder="Navigation order" value={navOrder} onChange={(event) => setNavOrder(event.target.value)} />

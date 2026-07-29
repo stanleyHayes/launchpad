@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition, type SyntheticEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { OrgRequest } from "@launchpad/api-client";
 import { ApiError } from "@launchpad/api-client";
-import { EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
+import { Select, EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
 import { getClient } from "@/lib/api";
 import { clearSession, getAccessToken } from "@/lib/session";
 
@@ -160,7 +160,7 @@ export default function RequestsPage() {
           <h2 className="text-lg font-semibold">New request</h2>
           <form className="mt-4 grid gap-3" onSubmit={onCreate}>
             <div className="grid gap-3 sm:grid-cols-2">
-              <select
+              <Select
                 className="lp-input"
                 name="kind"
                 value={kind}
@@ -170,14 +170,14 @@ export default function RequestsPage() {
               >
                 <option value="equipment">Equipment</option>
                 <option value="access">Access</option>
-              </select>
-              <select className="lp-input" name="item" key={kind} defaultValue={items[0].value}>
+              </Select>
+              <Select className="lp-input" name="item" key={kind} defaultValue={items[0].value}>
                 {items.map((item) => (
                   <option key={item.value} value={item.value}>
                     {item.label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <textarea
               className="lp-input min-h-24 resize-y"

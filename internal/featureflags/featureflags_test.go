@@ -242,6 +242,26 @@ func TestPlatformCreateFlagRecordsGlobalAudit(t *testing.T) {
 	}
 }
 
+func TestListFlagsNormalizesLegacyRolloutFields(t *testing.T) {
+	t.Parallel()
+
+	repo := newMemoryRepo()
+	repo.flags["legacy"] = featureflags.Flag{
+		Key:         "legacy",
+		Description: "Created before progressive rollout fields existed",
+		Enabled:     true,
+	}
+	svc := featureflags.NewService(repo, stubOrgReader{})
+
+	items, err := svc.ListFlags(context.Background())
+	if err != nil {
+		t.Fatalf("ListFlags: %v", err)
+	}
+	if len(items) != 1 || items[0].RolloutPercentage != 100 {
+		t.Fatalf("ListFlags = %+v, want legacy rollout normalized to 100", items)
+	}
+}
+
 func newAuthedRequest(
 	method, target, body string,
 	principal security.Principal,

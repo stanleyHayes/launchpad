@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition, type SyntheticEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { Employee, Meeting, MeetingStatus, MeetingType } from "@launchpad/api-client";
 import { ApiError } from "@launchpad/api-client";
-import { EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
+import { Select, EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
 import { getClient } from "@/lib/api";
 import { clearSession, getAccessToken } from "@/lib/session";
 
@@ -195,22 +195,22 @@ export default function MeetingsPage() {
           <form className="mt-4 grid gap-3" onSubmit={onSchedule}>
             <div className="grid gap-3 sm:grid-cols-2">
               <input className="lp-input" name="title" placeholder="Meeting title" required />
-              <select className="lp-input" name="attendeeEmployeeId" required>
+              <Select className="lp-input" name="attendeeEmployeeId" required>
                 {employeeOptions.map((employee) => (
                   <option key={employee.id} value={employee.id}>
                     {`${employee.firstName} ${employee.lastName}`.trim()}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
-              <select className="lp-input" name="type">
+              <Select className="lp-input" name="type">
                 {meetingTypes.map((meetingType) => (
                   <option key={meetingType.value} value={meetingType.value}>
                     {meetingType.label}
                   </option>
                 ))}
-              </select>
+              </Select>
               <input className="lp-input" name="startsAt" type="datetime-local" required />
               <input
                 className="lp-input"
@@ -250,7 +250,7 @@ export default function MeetingsPage() {
                 {pending && !loaded ? "Loading…" : `${meetings.length} meetings`}
               </p>
             </div>
-            <select
+            <Select
               className="lp-input w-auto"
               value={statusFilter}
               onChange={(event) => {
@@ -264,7 +264,7 @@ export default function MeetingsPage() {
                   {filter.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           {loaded && meetings.length === 0 ? (
             <div className="p-5">

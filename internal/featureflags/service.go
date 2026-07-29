@@ -79,6 +79,11 @@ func (s *Service) ListFlags(ctx context.Context) ([]Flag, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list feature flags: %w", err)
 	}
+	for index := range items {
+		items[index].RolloutPercentage = normalizeRolloutPercentage(items[index].RolloutPercentage)
+		items[index].PlanCodes = normalizePlanCodes(items[index].PlanCodes)
+		items[index].CohortUserIDs = normalizeValues(items[index].CohortUserIDs)
+	}
 
 	return items, nil
 }

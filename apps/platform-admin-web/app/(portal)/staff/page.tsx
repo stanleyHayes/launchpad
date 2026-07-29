@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition, type SyntheticEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { PlatformStaffMember } from "@launchpad/api-client";
 import { ApiError } from "@launchpad/api-client";
-import { EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
+import { Select, EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
 import { getClient } from "@/lib/api";
 import { clearSession, getAccessToken } from "@/lib/session";
 
@@ -171,13 +171,13 @@ export default function StaffPage() {
               required
             />
             <input className="lp-input" name="displayName" placeholder="Display name" required />
-            <select className="lp-input md:col-span-2" name="roleCode" defaultValue="support_agent">
+            <Select className="lp-input md:col-span-2" name="roleCode" defaultValue="support_agent">
               {STAFF_ROLES.map((role) => (
                 <option key={role} value={role}>
                   {role}
                 </option>
               ))}
-            </select>
+            </Select>
             <div className="md:col-span-2">
               <button
                 type="submit"
@@ -224,7 +224,7 @@ export default function StaffPage() {
                     </time>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <select
+                    <Select
                       className="lp-input"
                       value={member.roleCode}
                       disabled={pending}
@@ -237,7 +237,7 @@ export default function StaffPage() {
                           {role}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                     <button
                       type="button"
                       disabled={pending}

@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition, type SyntheticEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { ChannelStatus, MeResponse, Organization } from "@launchpad/api-client";
 import { ApiError } from "@launchpad/api-client";
-import {
+import { Select,
   Icon,
   InitialsAvatar,
   PageHeader,
@@ -228,13 +228,13 @@ export default function SettingsPage() {
                 </label>
                 <label className="block text-sm font-medium">
                   Timezone
-                  <select className="lp-input mt-1.5" name="timezone" defaultValue={org?.timezone ?? "UTC"}>
+                  <Select className="lp-input mt-1.5" name="timezone" defaultValue={org?.timezone ?? "UTC"}>
                     {timezones.map((tz) => (
                       <option key={tz} value={tz}>
                         {tz}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </label>
                 <label className="block text-sm font-medium">
                   Brand primary color

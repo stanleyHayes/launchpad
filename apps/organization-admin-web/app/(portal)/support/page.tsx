@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition, type SyntheticEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { SupportTicket } from "@launchpad/api-client";
 import { ApiError } from "@launchpad/api-client";
-import { EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
+import { Select, EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
 import { getClient } from "@/lib/api";
 import { clearSession, getAccessToken } from "@/lib/session";
 
@@ -106,12 +106,12 @@ export default function SupportPage() {
                 placeholder="Describe your issue"
                 required
               />
-              <select className="lp-input" name="priority" defaultValue="normal">
+              <Select className="lp-input" name="priority" defaultValue="normal">
                 <option value="low">Low priority</option>
                 <option value="normal">Normal priority</option>
                 <option value="high">High priority</option>
                 <option value="urgent">Urgent</option>
-              </select>
+              </Select>
               <div>
                 <button
                   type="submit"
