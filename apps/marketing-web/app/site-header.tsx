@@ -41,6 +41,26 @@ export function SiteHeader({ variant = "hero" }: { variant?: "hero" | "light" })
     return () => { active = false; };
   }, []);
 
+  useEffect(() => {
+    if (!open) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
+
   const links = [
     ...navLinks,
     ...cmsLinks
@@ -72,7 +92,7 @@ export function SiteHeader({ variant = "hero" }: { variant?: "hero" | "light" })
   }
 
   return (
-    <header className="absolute inset-x-0 top-0 z-30">
+    <header className={`absolute inset-x-0 top-0 ${open ? "z-50" : "z-30"}`}>
       <div className="mx-auto w-full max-w-6xl px-4 pt-5">
         <div
           className={
@@ -103,17 +123,17 @@ export function SiteHeader({ variant = "hero" }: { variant?: "hero" | "light" })
             >
               {pathname.startsWith("/fr") ? "EN" : "FR"}
             </Link>
-            <ThemeSwitcher onDark={onHero} className="hidden md:inline-flex" />
-            <Link
-              href="/signup"
-              className="hidden md:inline-flex"
-              style={{ textDecoration: "none" }}
-            >
-              <span className="lp-btn lp-btn--primary">
-                Start free trial
-                <Icon name="arrow-right" className="h-4 w-4" />
-              </span>
-            </Link>
+            <div className="hidden md:block">
+              <ThemeSwitcher onDark={onHero} />
+            </div>
+            <div className="hidden md:block">
+              <Link href="/signup" style={{ textDecoration: "none" }}>
+                <span className="lp-btn lp-btn--primary">
+                  Start free trial
+                  <Icon name="arrow-right" className="h-4 w-4" />
+                </span>
+              </Link>
+            </div>
             <button
               type="button"
               onClick={() => {
@@ -133,8 +153,17 @@ export function SiteHeader({ variant = "hero" }: { variant?: "hero" | "light" })
         </div>
 
         {open ? (
-          <div className="lp-card mt-2 p-4 text-[var(--lp-ink)] md:hidden">
-            <nav className="flex flex-col">
+          <>
+            <button
+              type="button"
+              aria-label="Close menu"
+              onClick={() => {
+                setOpen(false);
+              }}
+              className="fixed inset-0 z-[-1] bg-[#071426] md:hidden"
+            />
+            <div className="fixed inset-x-4 bottom-4 top-[5.75rem] overflow-y-auto rounded-3xl bg-[var(--lp-paper-elevated)] p-5 text-[var(--lp-ink)] shadow-[0_24px_80px_rgba(4,14,30,0.45)] md:hidden">
+              <nav className="flex flex-col">
               {links.map((link) => {
                 const active = pathname === link.href;
                 return (
@@ -144,7 +173,7 @@ export function SiteHeader({ variant = "hero" }: { variant?: "hero" | "light" })
                     onClick={() => {
                       setOpen(false);
                     }}
-                    className={`rounded-xl px-3 py-2.5 text-sm ${
+                    className={`rounded-xl px-4 py-3 text-base ${
                       active
                         ? "bg-[var(--lp-brand-soft)] font-semibold text-[var(--lp-brand)]"
                         : "font-medium text-[var(--lp-ink)] hover:bg-[var(--lp-brand-soft)]"
@@ -167,8 +196,9 @@ export function SiteHeader({ variant = "hero" }: { variant?: "hero" | "light" })
                   <Icon name="arrow-right" className="h-4 w-4" />
                 </span>
               </Link>
-            </nav>
-          </div>
+              </nav>
+            </div>
+          </>
         ) : null}
       </div>
     </header>
