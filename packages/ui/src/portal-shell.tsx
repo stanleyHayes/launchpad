@@ -4,7 +4,6 @@ import { useEffect, useState, type ReactNode } from "react";
 import { AppSidebar, type NavGroup } from "./app-sidebar";
 import { Icon } from "./icon";
 import { LogoTile } from "./logo-tile";
-import { ThemeSwitcher } from "./theme-switcher";
 import { UserMenu, type UserMenuItem, type UserMenuUser } from "./user-menu";
 import { cn } from "./cn";
 
@@ -141,18 +140,15 @@ export function PortalShell({
                 </div>
               }
               footer={
-                <div className="space-y-3">
-                  <ThemeSwitcher className="w-full justify-center" />
-                  {onLogout ? (
-                    <button
-                      type="button"
-                      onClick={onLogout}
-                      className="w-full rounded-[10px] border border-white/15 px-3 py-2 text-left text-sm font-medium text-white/80 transition hover:bg-white/5 hover:text-white"
-                    >
-                      Sign out
-                    </button>
-                  ) : null}
-                </div>
+                onLogout ? (
+                  <button
+                    type="button"
+                    onClick={onLogout}
+                    className="w-full rounded-[10px] border border-white/15 px-3 py-2 text-left text-sm font-medium text-white/80 transition hover:bg-white/5 hover:text-white"
+                  >
+                    Sign out
+                  </button>
+                ) : null
               }
             />
           </div>
@@ -183,7 +179,6 @@ export function PortalShell({
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-3">
-            <ThemeSwitcher className="max-md:hidden" />
             {user ? (
               <UserMenu user={user} items={userMenuItems} onNavigate={navigate} onLogout={onLogout} />
             ) : null}
