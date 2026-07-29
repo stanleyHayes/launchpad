@@ -21,6 +21,8 @@ export type IconName =
   | "at-sign"
   | "message"
   | "chevron-down"
+  | "chevron-left"
+  | "chevron-right"
   | "log-out"
   | "bell"
   | "home"
@@ -133,6 +135,8 @@ const paths: Record<IconName, ReactNode> = {
     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" />
   ),
   "chevron-down": <path d="m6 9 6 6 6-6" />,
+  "chevron-left": <path d="m15 18-6-6 6-6" />,
+  "chevron-right": <path d="m9 18 6-6-6-6" />,
   "log-out": (
     <>
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />

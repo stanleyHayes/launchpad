@@ -44,6 +44,11 @@ export function PortalShell({
   className = "",
 }: PortalShellProps) {
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  useEffect(() => {
+    setSidebarCollapsed(window.localStorage.getItem("lp-sidebar-collapsed") === "true");
+  }, []);
 
   useEffect(() => {
     if (!mobileNavigationOpen) return;
@@ -66,7 +71,15 @@ export function PortalShell({
     onNavigate(href);
   }
 
-  const brand = (
+  function toggleSidebar() {
+    setSidebarCollapsed((current) => {
+      const next = !current;
+      window.localStorage.setItem("lp-sidebar-collapsed", String(next));
+      return next;
+    });
+  }
+
+  const expandedBrand = (
     <div className="flex min-w-0 items-center gap-3">
       <LogoTile size={44} />
       <span className="min-w-0">
@@ -82,11 +95,13 @@ export function PortalShell({
       </span>
     </div>
   );
+  const collapsedBrand = <LogoTile size={40} />;
 
   return (
     <div
       className={cn(
-        "lp-portal-frame fixed inset-0 grid h-[100dvh] min-h-0 grid-cols-[288px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] overflow-hidden max-md:grid-cols-1",
+        "lp-portal-frame fixed inset-0 grid h-[100dvh] min-h-0 grid-rows-[minmax(0,1fr)] overflow-hidden transition-[grid-template-columns] duration-200 max-md:grid-cols-1",
+        sidebarCollapsed ? "grid-cols-[88px_minmax(0,1fr)]" : "grid-cols-[288px_minmax(0,1fr)]",
         className,
       )}
     >
@@ -96,7 +111,9 @@ export function PortalShell({
           groups={groups}
           workspaceLabel={workspaceLabel}
           onNavigate={navigate}
-          brand={brand}
+          collapsed={sidebarCollapsed}
+          onToggleCollapsed={toggleSidebar}
+          brand={sidebarCollapsed ? collapsedBrand : expandedBrand}
           footer={
             onLogout ? (
               <button
@@ -126,9 +143,10 @@ export function PortalShell({
               workspaceLabel={workspaceLabel}
               onNavigate={navigate}
               className="w-full"
+              collapsed={false}
               brand={
                 <div className="flex items-center justify-between gap-3">
-                  {brand}
+                  {expandedBrand}
                   <button
                     type="button"
                     aria-label="Close navigation"
