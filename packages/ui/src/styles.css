@@ -108,6 +108,37 @@
   background: var(--lp-paper);
 }
 
+/* Interactive affordances --------------------------------------------------
+ * Browsers do not consistently give buttons a pointer cursor by default.
+ * Keep this centralized so every portal and marketing surface clearly signals
+ * clickable controls, including semantic controls that are not native links.
+ * ------------------------------------------------------------------------- */
+:where(
+  a[href],
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="link"]:not([aria-disabled="true"]),
+  summary,
+  select:not(:disabled),
+  input[type="button"]:not(:disabled),
+  input[type="submit"]:not(:disabled),
+  input[type="reset"]:not(:disabled),
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled),
+  label[for]
+) {
+  cursor: pointer;
+}
+
+:where(
+  button:disabled,
+  select:disabled,
+  input:disabled,
+  [aria-disabled="true"]
+) {
+  cursor: not-allowed;
+}
+
 [data-lp-theme="glass"] body {
   background:
     radial-gradient(ellipse 60% 45% at 85% -5%, color-mix(in srgb, var(--lp-brand) 28%, transparent), transparent 60%),
