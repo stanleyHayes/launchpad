@@ -5,7 +5,7 @@ import { LegalSection, LegalShell } from "../legal-shell";
 import { Icon } from "../ui-icon";
 
 export const metadata: Metadata = buildMetadata({
-  title: "Contact — LaunchPad",
+  title: "Contact | LaunchPad",
   description:
     "Talk to the LaunchPad team: book a demo, ask a sales question, or reach product support.",
   path: "/contact",
@@ -17,8 +17,20 @@ export default function ContactPage() {
       eyebrow="Company"
       title="Contact us"
       intro="Questions about onboarding your team with LaunchPad? Here are the fastest ways to reach us."
+      icon="message"
+      sections={[
+        { id: "demo", label: "See LaunchPad in action" },
+        { id: "sales", label: "Sales and general questions" },
+        { id: "support", label: "Product support" },
+        { id: "security", label: "Security reports" },
+      ]}
+      highlights={[
+        { icon: "clock", label: "Response time", value: "One business day" },
+        { icon: "message", label: "Demo", value: "Tailored to your team" },
+        { icon: "shield", label: "Security", value: "Direct reporting channel" },
+      ]}
     >
-      <LegalSection heading="See LaunchPad in action">
+      <LegalSection id="demo" heading="See LaunchPad in action">
         <p>
           The quickest way to evaluate LaunchPad is a guided demo: we walk through journeys,
           assignments, analytics, and the enterprise controls your security team will ask about.
@@ -33,7 +45,7 @@ export default function ContactPage() {
         </p>
       </LegalSection>
 
-      <LegalSection heading="Sales and general questions">
+      <LegalSection id="sales" heading="Sales and general questions">
         <p>
           Pricing, plan fit, security reviews, and procurement:{" "}
           <a
@@ -46,7 +58,7 @@ export default function ContactPage() {
         </p>
       </LegalSection>
 
-      <LegalSection heading="Product support">
+      <LegalSection id="support" heading="Product support">
         <p>
           Already a customer? Reach the support team at{" "}
           <a
@@ -60,7 +72,7 @@ export default function ContactPage() {
         </p>
       </LegalSection>
 
-      <LegalSection heading="Security reports">
+      <LegalSection id="security" heading="Security reports">
         <p>
           To report a vulnerability, please use{" "}
           <a
@@ -68,8 +80,8 @@ export default function ContactPage() {
             className="text-[var(--lp-brand)] hover:underline"
           >
             security@launchpad.example
-          </a>{" "}
-          — see our{" "}
+          </a>
+          . See our{" "}
           <Link href="/security" className="text-[var(--lp-brand)] hover:underline">
             security page
           </Link>{" "}

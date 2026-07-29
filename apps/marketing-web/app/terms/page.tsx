@@ -4,7 +4,7 @@ import { buildMetadata } from "../../lib/seo";
 import { LegalSection, LegalShell } from "../legal-shell";
 
 export const metadata: Metadata = buildMetadata({
-  title: "Terms of Service — LaunchPad",
+  title: "Terms of Service | LaunchPad",
   description:
     "The terms that govern use of the LaunchPad onboarding platform: accounts, acceptable use, data ownership, and service levels.",
   path: "/terms",
@@ -17,8 +17,25 @@ export default function TermsPage() {
       title="Terms of Service"
       intro="The agreement between LaunchPad, Inc. and the organizations that use our onboarding platform."
       updated="July 28, 2026"
+      icon="book"
+      sections={[
+        { id: "service", label: "The service" },
+        { id: "accounts", label: "Accounts and responsibilities" },
+        { id: "acceptable-use", label: "Acceptable use" },
+        { id: "your-data", label: "Your data" },
+        { id: "billing", label: "Subscriptions and billing" },
+        { id: "service-levels", label: "Service levels" },
+        { id: "liability", label: "Liability" },
+        { id: "termination", label: "Termination and changes" },
+        { id: "contact", label: "Contact" },
+      ]}
+      highlights={[
+        { icon: "building", label: "Applies to", value: "Customer organizations" },
+        { icon: "check", label: "Data ownership", value: "Customer retained" },
+        { icon: "clock", label: "Cancellation", value: "Any time" },
+      ]}
     >
-      <LegalSection heading="The service">
+      <LegalSection id="service" heading="The service">
         <p>
           LaunchPad is a multi-tenant software-as-a-service platform for building and running
           employee onboarding journeys: templates, assignments, approvals, notifications,
@@ -28,7 +45,7 @@ export default function TermsPage() {
         </p>
       </LegalSection>
 
-      <LegalSection heading="Accounts and responsibilities">
+      <LegalSection id="accounts" heading="Accounts and responsibilities">
         <p>
           Each organization (&ldquo;customer&rdquo;) designates administrators who manage its
           workspace, users, roles, and integrations. Customers are responsible for the accuracy of
@@ -37,7 +54,7 @@ export default function TermsPage() {
         </p>
       </LegalSection>
 
-      <LegalSection heading="Acceptable use">
+      <LegalSection id="acceptable-use" heading="Acceptable use">
         <p>You agree not to:</p>
         <ul className="list-disc space-y-2 pl-5">
           <li>Use the service for anything unlawful, or to infringe others&rsquo; rights.</li>
@@ -53,9 +70,9 @@ export default function TermsPage() {
         <p>We may suspend access where use threatens the service or other customers.</p>
       </LegalSection>
 
-      <LegalSection heading="Your data">
+      <LegalSection id="your-data" heading="Your data">
         <p>
-          Customers own the data they put into LaunchPad — employee records, journey content,
+          Customers own the data they put into LaunchPad: employee records, journey content,
           assignments, and configuration. We process that data only to provide and improve the
           service, as described in our{" "}
           <Link href="/privacy" className="text-[var(--lp-brand)] hover:underline">
@@ -66,7 +83,7 @@ export default function TermsPage() {
         </p>
       </LegalSection>
 
-      <LegalSection heading="Subscriptions and billing">
+      <LegalSection id="billing" heading="Subscriptions and billing">
         <p>
           Paid plans are billed as described on our pricing page or in your order form. Trials
           convert to paid plans only when you choose one. You can cancel at any time and keep
@@ -74,7 +91,7 @@ export default function TermsPage() {
         </p>
       </LegalSection>
 
-      <LegalSection heading="Service levels">
+      <LegalSection id="service-levels" heading="Service levels">
         <p>
           We design and operate LaunchPad for high availability. Enterprise plans include
           SLA-backed support with response and uptime commitments set out in the customer&rsquo;s
@@ -83,7 +100,7 @@ export default function TermsPage() {
         </p>
       </LegalSection>
 
-      <LegalSection heading="Liability">
+      <LegalSection id="liability" heading="Liability">
         <p>
           To the maximum extent permitted by law, neither party is liable for indirect or
           consequential damages, and each party&rsquo;s aggregate liability is limited to the
@@ -92,7 +109,7 @@ export default function TermsPage() {
         </p>
       </LegalSection>
 
-      <LegalSection heading="Termination and changes">
+      <LegalSection id="termination" heading="Termination and changes">
         <p>
           Either party may terminate for material breach that is not cured after notice. On
           termination we make customer data available for export for a reasonable period before
@@ -102,7 +119,7 @@ export default function TermsPage() {
         </p>
       </LegalSection>
 
-      <LegalSection heading="Contact">
+      <LegalSection id="contact" heading="Contact">
         <p>
           Questions about these terms:{" "}
           <a
