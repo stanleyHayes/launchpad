@@ -9,13 +9,25 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"launchpad/internal/entitlements"
 )
+
+type PlanReader interface {
+	PlanCode(ctx context.Context, organizationID string) (string, error)
+}
 
 // Service implements the provider-connection use cases.
 type Service struct {
 	repo    Repository
 	audit   AuditRecorder
 	clients map[string]providerClient
+	plans   PlanReader
+}
+
+func (s *Service) WithPlanLimits(plans PlanReader) *Service {
+	s.plans = plans
+	return s
 }
 
 // NewService constructs a Service with the credential validators for each
@@ -43,6 +55,23 @@ func (s *Service) Connect(
 
 	if err := validateConnectInput(info, organizationID, in); err != nil {
 		return ConnectionResponse{}, err
+	}
+	if s.plans != nil {
+		if _, err := s.repo.Get(ctx, organizationID, providerKey); errors.Is(err, ErrNotFound) {
+			planCode, planErr := s.plans.PlanCode(ctx, organizationID)
+			if planErr != nil {
+				return ConnectionResponse{}, fmt.Errorf("read organization plan: %w", planErr)
+			}
+			items, listErr := s.repo.List(ctx, organizationID)
+			if listErr != nil {
+				return ConnectionResponse{}, fmt.Errorf("count integrations for plan limit: %w", listErr)
+			}
+			if limitErr := entitlements.Check(planCode, entitlements.ResourceIntegrations, len(items)); limitErr != nil {
+				return ConnectionResponse{}, limitErr
+			}
+		} else if err != nil {
+			return ConnectionResponse{}, fmt.Errorf("check existing integration: %w", err)
+		}
 	}
 
 	handle, err := s.validateCredential(ctx, providerKey, in)

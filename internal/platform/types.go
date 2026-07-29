@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"launchpad/internal/organizations"
 )
 
 // OrganizationListInput filters the platform tenant directory. Search is a
@@ -13,6 +15,8 @@ type OrganizationListInput struct {
 	Search   string
 	Status   string
 	PlanCode string
+	Offset   int
+	Limit    int
 }
 
 func (in OrganizationListInput) normalized() OrganizationListInput {
@@ -20,7 +24,16 @@ func (in OrganizationListInput) normalized() OrganizationListInput {
 		Search:   strings.ToLower(strings.TrimSpace(in.Search)),
 		Status:   strings.ToLower(strings.TrimSpace(in.Status)),
 		PlanCode: strings.ToLower(strings.TrimSpace(in.PlanCode)),
+		Offset:   max(in.Offset, 0),
+		Limit:    in.Limit,
 	}
+}
+
+type OrganizationPage struct {
+	Items  []organizations.Organization
+	Total  int
+	Offset int
+	Limit  int
 }
 
 var (

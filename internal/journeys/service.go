@@ -9,11 +9,23 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"launchpad/internal/entitlements"
 )
+
+type PlanReader interface {
+	PlanCode(ctx context.Context, organizationID string) (string, error)
+}
 
 // Service implements journey use cases.
 type Service struct {
-	repo Repository
+	repo  Repository
+	plans PlanReader
+}
+
+func (s *Service) WithPlanLimits(plans PlanReader) *Service {
+	s.plans = plans
+	return s
 }
 
 // NewService constructs a Service.
@@ -30,6 +42,19 @@ func (s *Service) CreateTemplate(
 	name := strings.TrimSpace(in.Name)
 	if organizationID == "" || name == "" || strings.TrimSpace(in.CreatedBy) == "" {
 		return Template{}, ErrInvalidInput
+	}
+	if s.plans != nil {
+		planCode, err := s.plans.PlanCode(ctx, organizationID)
+		if err != nil {
+			return Template{}, fmt.Errorf("read organization plan: %w", err)
+		}
+		items, err := s.repo.ListTemplates(ctx, organizationID)
+		if err != nil {
+			return Template{}, fmt.Errorf("count journey templates for plan limit: %w", err)
+		}
+		if err := entitlements.Check(planCode, entitlements.ResourceJourneyTemplates, len(items)); err != nil {
+			return Template{}, err
+		}
 	}
 
 	now := time.Now().UTC()

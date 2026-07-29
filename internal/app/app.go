@@ -42,6 +42,7 @@ import (
 	"launchpad/internal/email"
 	"launchpad/internal/employees"
 	employeesmongo "launchpad/internal/employees/mongo"
+	"launchpad/internal/entitlements"
 	"launchpad/internal/featureflags"
 	featureflagsmongo "launchpad/internal/featureflags/mongo"
 	"launchpad/internal/hris"
@@ -926,9 +927,10 @@ func buildHandlers(db *drivermongo.Database, deps Dependencies, cfg config.Confi
 
 	auditSvc := audit.NewService(stores.audit)
 	orgSvc, roleSvc, inviteAccounts := newOrgAndRoleServices(stores.org, stores.role, stores.user)
+	planReader := orgPlanCodeReader{orgs: orgSvc}
 	deptSvc := departments.NewService(stores.department)
-	employeeSvc := employees.NewService(stores.employee, deptSvc)
-	journeySvc := journeys.NewService(stores.journey)
+	employeeSvc := employees.NewService(stores.employee, deptSvc).WithPlanLimits(planReader)
+	journeySvc := journeys.NewService(stores.journey).WithPlanLimits(planReader)
 	marketplaceSvc := marketplace.NewService(stores.marketplace, marketplaceJourneyInstaller{journeys: journeySvc})
 	notificationSvc := newNotificationService(db, cfg, stores.user, employeeSvc)
 	supportSvc := support.NewService(stores.support)
@@ -998,7 +1000,7 @@ func buildHandlers(db *drivermongo.Database, deps Dependencies, cfg config.Confi
 	cmsSvc := cms.NewService(stores.cms)
 	scheduler.Register("cms_scheduled_publish", cmsSvc.PublishDue)
 	knowledgeSvc, assistantSvc, analyticsSvc := newKnowledgeStack(db, cfg, stores, assignmentSvc, employeeSvc, deptSvc)
-	knowledgeSvc.WithConnector(knowledge.NewHTTPConnector()).WithNotifier(notificationSvc)
+	knowledgeSvc.WithPlanLimits(planReader).WithConnector(knowledge.NewHTTPConnector()).WithNotifier(notificationSvc)
 	scheduler.Register("knowledge-stale-alerts", knowledgeSvc.NotifyStale)
 	sessionStore := authredis.NewSessionStore(deps.Redis.RDB(), cfg.RefreshTTL)
 	authSvc := newAuthService(cfg, stores.user, stores.invitation, sessionStore, orgSvc, auditSvc, platformSvc)
@@ -1013,6 +1015,31 @@ func buildHandlers(db *drivermongo.Database, deps Dependencies, cfg config.Confi
 		)
 	inviteAccounts.auth = authSvc
 	accounts, entIntegrations := newIntegrationStack(db, deps, authSvc, orgSvc, auditSvc, employeeSvc, deptSvc, cfg)
+	entIntegrations.connections.WithPlanLimits(planReader)
+	platformSvc.WithOrganizationUsage(func(ctx context.Context, org organizations.Organization) (entitlements.Usage, error) {
+		employeeCount, err := stores.employee.Count(ctx, org.ID)
+		if err != nil {
+			return entitlements.Usage{}, fmt.Errorf("count employees: %w", err)
+		}
+		templates, err := stores.journey.ListTemplates(ctx, org.ID)
+		if err != nil {
+			return entitlements.Usage{}, fmt.Errorf("list journey templates: %w", err)
+		}
+		documents, err := stores.knowledge.List(ctx, org.ID)
+		if err != nil {
+			return entitlements.Usage{}, fmt.Errorf("list knowledge documents: %w", err)
+		}
+		connections, err := entIntegrations.connections.List(ctx, org.ID)
+		if err != nil {
+			return entitlements.Usage{}, fmt.Errorf("list integrations: %w", err)
+		}
+		return entitlements.NewUsage(org.PlanCode, map[string]int{
+			entitlements.ResourceEmployees:          int(employeeCount),
+			entitlements.ResourceJourneyTemplates:   len(templates),
+			entitlements.ResourceKnowledgeDocuments: len(documents),
+			entitlements.ResourceIntegrations:       len(connections),
+		}), nil
+	})
 
 	return wiredServices{
 		auth:         authSvc,
@@ -1559,6 +1586,10 @@ func registerPlatformRoutes(platformRoutes chi.Router, routeHandlers handlers) {
 	platformRoutes.Get(
 		"/platform/organizations/{organizationID}",
 		routeHandlers.platform.HandleGetOrganization,
+	)
+	platformRoutes.Get(
+		"/platform/organizations/{organizationID}/details",
+		routeHandlers.platform.HandleGetOrganizationDetail,
 	)
 	platformRoutes.Post(
 		"/platform/organizations/{organizationID}/suspend",

@@ -11,7 +11,12 @@ import (
 	"github.com/google/uuid"
 
 	"launchpad/internal/departments"
+	"launchpad/internal/entitlements"
 )
+
+type PlanReader interface {
+	PlanCode(ctx context.Context, organizationID string) (string, error)
+}
 
 // ReferenceChecker validates related department/role/manager references.
 type ReferenceChecker interface {
@@ -31,6 +36,12 @@ type Service struct {
 	repo        Repository
 	references  ReferenceChecker
 	ruleApplier RuleApplier
+	plans       PlanReader
+}
+
+func (s *Service) WithPlanLimits(plans PlanReader) *Service {
+	s.plans = plans
+	return s
 }
 
 // NewService constructs a Service.
@@ -56,6 +67,19 @@ func (s *Service) Create(ctx context.Context, organizationID string, in CreateIn
 
 	if in.StartDate.IsZero() {
 		return Employee{}, ErrInvalidInput
+	}
+	if s.plans != nil {
+		planCode, err := s.plans.PlanCode(ctx, organizationID)
+		if err != nil {
+			return Employee{}, fmt.Errorf("read organization plan: %w", err)
+		}
+		used, err := s.repo.Count(ctx, organizationID)
+		if err != nil {
+			return Employee{}, fmt.Errorf("count employees for plan limit: %w", err)
+		}
+		if err := entitlements.Check(planCode, entitlements.ResourceEmployees, int(used)); err != nil {
+			return Employee{}, err
+		}
 	}
 	mobilePhone := strings.TrimSpace(in.MobilePhone)
 	if mobilePhone != "" && (!strings.HasPrefix(mobilePhone, "+") || len(mobilePhone) < 8) {

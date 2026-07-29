@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"launchpad/internal/entitlements"
 	"launchpad/internal/organizations"
 )
 
@@ -53,6 +54,29 @@ type Service struct {
 	revenueMetrics func(context.Context) (RevenueMetrics, error)
 	supportMetrics func(context.Context) (SupportMetrics, error)
 	storageMetrics func(context.Context) (StorageOverview, error)
+	usageLoader    func(context.Context, organizations.Organization) (entitlements.Usage, error)
+}
+
+func (s *Service) WithOrganizationUsage(
+	loader func(context.Context, organizations.Organization) (entitlements.Usage, error),
+) *Service {
+	s.usageLoader = loader
+	return s
+}
+
+func (s *Service) OrganizationUsage(ctx context.Context, organizationID string) (entitlements.Usage, error) {
+	org, err := s.GetOrganization(ctx, organizationID)
+	if err != nil {
+		return entitlements.Usage{}, err
+	}
+	if s.usageLoader == nil {
+		return entitlements.Usage{}, ErrInvalidInput
+	}
+	usage, err := s.usageLoader(ctx, org)
+	if err != nil {
+		return entitlements.Usage{}, fmt.Errorf("load organization usage: %w", err)
+	}
+	return usage, nil
 }
 
 func (s *Service) WithStorageMetrics(loader func(context.Context) (StorageOverview, error)) *Service {
@@ -191,6 +215,26 @@ func (s *Service) ListOrganizations(
 	}
 
 	return out, nil
+}
+
+func (s *Service) ListOrganizationsPage(
+	ctx context.Context,
+	input OrganizationListInput,
+) (OrganizationPage, error) {
+	filter := input.normalized()
+	items, err := s.ListOrganizations(ctx, filter)
+	if err != nil {
+		return OrganizationPage{}, err
+	}
+	limit := filter.Limit
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	offset := min(filter.Offset, len(items))
+	end := min(offset+limit, len(items))
+	return OrganizationPage{
+		Items: items[offset:end], Total: len(items), Offset: offset, Limit: limit,
+	}, nil
 }
 
 // GetOrganization returns one tenant organization.

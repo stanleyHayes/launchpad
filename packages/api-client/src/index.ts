@@ -119,6 +119,29 @@ export const organizationSchema = z.object({
   updatedAt: z.string(),
 });
 
+export const organizationPageSchema = z.object({
+  items: z.array(organizationSchema),
+  total: z.number().int().nonnegative(),
+  offset: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+});
+
+export const entitlementUsageItemSchema = z.object({
+  resource: z.string(),
+  used: z.number().int().nonnegative(),
+  limit: z.number().int(),
+});
+
+export const entitlementUsageSchema = z.object({
+  planCode: z.string(),
+  items: z.array(entitlementUsageItemSchema),
+});
+
+export const platformOrganizationDetailSchema = z.object({
+  organization: organizationSchema,
+  usage: entitlementUsageSchema,
+});
+
 export const tokenPairSchema = z.object({
   accessToken: z.string(),
   refreshToken: z.string(),
@@ -240,6 +263,10 @@ export const employeeSchema = z.object({
 
 export type User = z.infer<typeof userSchema>;
 export type Organization = z.infer<typeof organizationSchema>;
+export type OrganizationPage = z.infer<typeof organizationPageSchema>;
+export type EntitlementUsageItem = z.infer<typeof entitlementUsageItemSchema>;
+export type EntitlementUsage = z.infer<typeof entitlementUsageSchema>;
+export type PlatformOrganizationDetail = z.infer<typeof platformOrganizationDetailSchema>;
 export type TokenPair = z.infer<typeof tokenPairSchema>;
 export type AuthResult = z.infer<typeof authResultSchema>;
 export type OrganizationChoice = z.infer<typeof organizationChoiceSchema>;
@@ -2159,16 +2186,20 @@ export function createLaunchPadClient(options: LaunchPadClientOptions) {
       search?: string;
       status?: string;
       planCode?: string;
-    }): Promise<Organization[]> {
+      offset?: number;
+      limit?: number;
+    }): Promise<OrganizationPage> {
       const params = new URLSearchParams();
       if (filters?.search) params.set("search", filters.search);
       if (filters?.status) params.set("status", filters.status);
       if (filters?.planCode) params.set("planCode", filters.planCode);
+      if (filters?.offset !== undefined) params.set("offset", String(filters.offset));
+      if (filters?.limit !== undefined) params.set("limit", String(filters.limit));
       const query = params.toString();
       return request(
         `/api/v1/platform/organizations${query ? `?${query}` : ""}`,
         { method: "GET" },
-        z.array(organizationSchema),
+        organizationPageSchema,
       );
     },
 
@@ -2177,6 +2208,14 @@ export function createLaunchPadClient(options: LaunchPadClientOptions) {
         `/api/v1/platform/organizations/${encodeURIComponent(organizationId)}`,
         { method: "GET" },
         organizationSchema,
+      );
+    },
+
+    getPlatformOrganizationDetail(organizationId: string): Promise<PlatformOrganizationDetail> {
+      return request(
+        `/api/v1/platform/organizations/${encodeURIComponent(organizationId)}/details`,
+        { method: "GET" },
+        platformOrganizationDetailSchema,
       );
     },
 

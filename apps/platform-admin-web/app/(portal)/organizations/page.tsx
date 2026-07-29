@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Organization, SupportSessionCreated } from "@launchpad/api-client";
 import { ApiError } from "@launchpad/api-client";
@@ -9,11 +10,14 @@ import { getClient } from "@/lib/api";
 import { clearSession, getAccessToken } from "@/lib/session";
 
 const minReasonLength = 10;
+const pageSize = 10;
 
 export default function OrganizationsPage() {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -23,17 +27,21 @@ export default function OrganizationsPage() {
   const [sessionReason, setSessionReason] = useState("");
   const [createdSession, setCreatedSession] = useState<SupportSessionCreated | null>(null);
 
-  function reload(isStale?: () => boolean) {
+  function reload(targetPage = page, isStale?: () => boolean) {
     startTransition(() => {
       void (async () => {
         try {
-          const organizationItems = await getClient().listPlatformOrganizations({
+          const organizationPage = await getClient().listPlatformOrganizations({
             search: search.trim() || undefined,
             status: statusFilter || undefined,
             planCode: planFilter.trim() || undefined,
+            offset: targetPage * pageSize,
+            limit: pageSize,
           });
           if (isStale?.()) return;
-          setOrganizations(organizationItems);
+          setOrganizations(organizationPage.items);
+          setTotal(organizationPage.total);
+          setPage(targetPage);
         } catch (err) {
           if (isStale?.()) return;
           if (err instanceof ApiError && err.status === 401) {
@@ -53,7 +61,7 @@ export default function OrganizationsPage() {
       return;
     }
     let stale = false;
-    reload(() => stale);
+    reload(0, () => stale);
     return () => {
       stale = true;
     };
@@ -208,13 +216,13 @@ export default function OrganizationsPage() {
             <div className="border-b border-[var(--lp-border)] px-5 py-4">
               <h2 className="text-lg font-semibold">All organizations</h2>
               <p className="text-sm text-[var(--lp-ink-muted)]">
-                {organizations.length} tenants
+                {total} {total === 1 ? "tenant" : "tenants"}
               </p>
               <form
                 className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_12rem_12rem_auto]"
                 onSubmit={(event) => {
                   event.preventDefault();
-                  reload();
+                  reload(0);
                 }}
               >
                 <label className="text-sm font-medium">
@@ -319,6 +327,12 @@ export default function OrganizationsPage() {
                       ) : null}
                     </div>
                     <div className="flex flex-wrap gap-2">
+                      <Link
+                        href={`/organizations/${organization.id}`}
+                        className="rounded-[var(--lp-radius)] bg-[var(--lp-ink)] px-3 py-2 text-sm font-semibold text-white"
+                      >
+                        View details
+                      </Link>
                       {organization.status === "suspended" ? (
                         <button
                           type="button"
@@ -374,6 +388,31 @@ export default function OrganizationsPage() {
                 ))}
               </ul>
             )}
+            {total > pageSize ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--lp-border)] px-5 py-4">
+                <p className="text-sm text-[var(--lp-ink-muted)]">
+                  Page {page + 1} of {Math.ceil(total / pageSize)}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={pending || page === 0}
+                    onClick={() => reload(page - 1)}
+                    className="rounded-[var(--lp-radius)] border border-[var(--lp-border)] px-4 py-2 text-sm font-semibold disabled:opacity-40"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    disabled={pending || (page + 1) * pageSize >= total}
+                    onClick={() => reload(page + 1)}
+                    className="rounded-[var(--lp-radius)] bg-[var(--lp-accent)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </Surface>
         </Reveal>
       </div>

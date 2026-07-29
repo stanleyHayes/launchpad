@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,10 +15,17 @@ import (
 
 	"launchpad/internal/audit"
 	"launchpad/internal/employees"
+	"launchpad/internal/entitlements"
 	"launchpad/pkg/security"
 )
 
 type noopReferences struct{}
+
+type starterPlanReader struct{}
+
+func (starterPlanReader) PlanCode(context.Context, string) (string, error) {
+	return "starter", nil
+}
 
 func (noopReferences) EnsureDepartmentExists(context.Context, string, string) error {
 	return nil
@@ -63,6 +71,27 @@ func TestCreateRejectsZeroStartDate(t *testing.T) {
 
 	if !errors.Is(err, employees.ErrInvalidInput) {
 		t.Fatalf("got %v want %v", err, employees.ErrInvalidInput)
+	}
+}
+
+func TestCreateRejectsEmployeeAbovePlanLimit(t *testing.T) {
+	t.Parallel()
+
+	repo := newMemoryRepo()
+	for index := 0; index < 25; index++ {
+		id := fmt.Sprintf("employee-%d", index)
+		repo.items[id] = employees.Employee{ID: id, OrganizationID: "org-1"}
+	}
+	svc := employees.NewService(repo, noopReferences{}).WithPlanLimits(starterPlanReader{})
+
+	_, err := svc.Create(context.Background(), "org-1", employees.CreateInput{
+		FirstName: "Ada",
+		LastName:  "Lovelace",
+		WorkEmail: "ada@example.com",
+		StartDate: time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC),
+	})
+	if !errors.Is(err, entitlements.ErrLimitExceeded) {
+		t.Fatalf("got %v, want ErrLimitExceeded", err)
 	}
 }
 

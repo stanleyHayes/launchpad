@@ -378,9 +378,19 @@ paths:
         - name: planCode
           in: query
           schema: { type: string }
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizationPage"
   /platform/organizations/{organizationID}:
     get:
       summary: Get organization by id
@@ -395,6 +405,24 @@ paths:
       responses:
         "200":
           description: OK
+  /platform/organizations/{organizationID}/details:
+    get:
+      summary: Get an organization profile with subscription usage and limits
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: organizationID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Organization profile and current quota usage
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlatformOrganizationDetail"
   /platform/organizations/{organizationID}/suspend:
     post:
       summary: Suspend an organization
@@ -2165,6 +2193,62 @@ components:
       scheme: bearer
       bearerFormat: JWT
   schemas:
+    Organization:
+      type: object
+      required: [id, name, slug, status, planCode, timezone, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        slug: { type: string }
+        status: { type: string, enum: [trial, active, suspended, closed] }
+        planCode: { type: string }
+        timezone: { type: string }
+        customDomain: { type: string }
+        branding:
+          type: object
+          properties:
+            primaryColor: { type: string }
+            primaryHoverColor: { type: string }
+            accentColor: { type: string }
+            logoUrl: { type: string, format: uri }
+        setupStep: { type: integer, minimum: 0, maximum: 10 }
+        setupCompletedAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    OrganizationPage:
+      type: object
+      required: [items, total, offset, limit]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Organization" }
+        total: { type: integer, minimum: 0 }
+        offset: { type: integer, minimum: 0 }
+        limit: { type: integer, minimum: 1, maximum: 100 }
+    EntitlementUsageItem:
+      type: object
+      required: [resource, used, limit]
+      properties:
+        resource:
+          type: string
+          enum: [employees, journey_templates, knowledge_documents, integrations]
+        used: { type: integer, minimum: 0 }
+        limit:
+          type: integer
+          description: Maximum allowed, or -1 for unlimited.
+    PlatformOrganizationDetail:
+      type: object
+      required: [organization, usage]
+      properties:
+        organization: { $ref: "#/components/schemas/Organization" }
+        usage:
+          type: object
+          required: [planCode, items]
+          properties:
+            planCode: { type: string }
+            items:
+              type: array
+              items: { $ref: "#/components/schemas/EntitlementUsageItem" }
     RegisterRequest:
       type: object
       required: [email, password, displayName, organizationName]

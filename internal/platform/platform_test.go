@@ -3,6 +3,7 @@ package platform_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"launchpad/internal/organizations"
@@ -274,6 +275,29 @@ func TestListOrganizationsFiltersBySearchStatusAndPlan(t *testing.T) {
 	}
 	if len(items) != 1 || items[0].ID != "two" {
 		t.Fatalf("slug-filtered organizations = %+v, want Orbit", items)
+	}
+}
+
+func TestListOrganizationsPageReturnsStableMetadata(t *testing.T) {
+	t.Parallel()
+
+	svc, _, orgs := newPlatformService(0, 0)
+	for index := 0; index < 5; index++ {
+		id := fmt.Sprintf("org-%d", index)
+		orgs.orgs[id] = organizations.Organization{
+			ID: id, Name: id, Slug: id, Status: "active", PlanCode: "starter",
+		}
+	}
+
+	page, err := svc.ListOrganizationsPage(context.Background(), platform.OrganizationListInput{
+		Offset: 2,
+		Limit:  2,
+	})
+	if err != nil {
+		t.Fatalf("list organization page: %v", err)
+	}
+	if page.Total != 5 || page.Offset != 2 || page.Limit != 2 || len(page.Items) != 2 {
+		t.Fatalf("page = %+v, want total=5 offset=2 limit=2 items=2", page)
 	}
 }
 

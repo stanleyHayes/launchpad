@@ -8,8 +8,13 @@ import (
 
 	"github.com/google/uuid"
 
+	"launchpad/internal/entitlements"
 	"launchpad/internal/notifications"
 )
+
+type PlanReader interface {
+	PlanCode(ctx context.Context, organizationID string) (string, error)
+}
 
 // Service implements knowledge document use cases.
 type Service struct {
@@ -17,6 +22,12 @@ type Service struct {
 	indexer   Indexer
 	connector Connector
 	notifier  Notifier
+	plans     PlanReader
+}
+
+func (s *Service) WithPlanLimits(plans PlanReader) *Service {
+	s.plans = plans
+	return s
 }
 
 func (s *Service) WithConnector(connector Connector) *Service {
@@ -43,6 +54,19 @@ func (s *Service) Create(
 	title := strings.TrimSpace(in.Title)
 	if organizationID == "" || createdByUserID == "" || title == "" {
 		return Document{}, ErrInvalidInput
+	}
+	if s.plans != nil {
+		planCode, err := s.plans.PlanCode(ctx, organizationID)
+		if err != nil {
+			return Document{}, fmt.Errorf("read organization plan: %w", err)
+		}
+		items, err := s.repo.List(ctx, organizationID)
+		if err != nil {
+			return Document{}, fmt.Errorf("count knowledge documents for plan limit: %w", err)
+		}
+		if err := entitlements.Check(planCode, entitlements.ResourceKnowledgeDocuments, len(items)); err != nil {
+			return Document{}, err
+		}
 	}
 
 	source := strings.TrimSpace(in.Source)

@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"launchpad/internal/entitlements"
 	"launchpad/pkg/httpx"
 	"launchpad/pkg/security"
 )
@@ -121,6 +122,8 @@ func requirePrincipal(w http.ResponseWriter, r *http.Request) (security.Principa
 
 func writeIntegrationError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
+	case errors.Is(err, entitlements.ErrLimitExceeded):
+		writeError(w, r, http.StatusConflict, "PLAN_LIMIT_EXCEEDED", err.Error())
 	case errors.Is(err, ErrInvalidInput):
 		writeError(w, r, http.StatusBadRequest, "INVALID_INPUT", "Invalid integration configuration")
 	case errors.Is(err, ErrUnknownProvider):

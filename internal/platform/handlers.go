@@ -5,11 +5,13 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"launchpad/internal/audit"
+	"launchpad/internal/entitlements"
 	"launchpad/internal/organizations"
 	"launchpad/pkg/httpx"
 	"launchpad/pkg/security"
@@ -57,10 +59,14 @@ func (h *Handler) HandleStorageOverview(w http.ResponseWriter, r *http.Request) 
 
 // HandleListOrganizations lists all tenant organizations.
 func (h *Handler) HandleListOrganizations(w http.ResponseWriter, r *http.Request) {
-	items, err := h.svc.ListOrganizations(r.Context(), OrganizationListInput{
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	page, err := h.svc.ListOrganizationsPage(r.Context(), OrganizationListInput{
 		Search:   r.URL.Query().Get("search"),
 		Status:   r.URL.Query().Get("status"),
 		PlanCode: r.URL.Query().Get("planCode"),
+		Offset:   offset,
+		Limit:    limit,
 	})
 	if err != nil {
 		slog.ErrorContext(r.Context(), "list organizations failed", "error", err)
@@ -69,12 +75,14 @@ func (h *Handler) HandleListOrganizations(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	responses := make([]organizations.OrganizationResponse, 0, len(items))
-	for _, item := range items {
+	responses := make([]organizations.OrganizationResponse, 0, len(page.Items))
+	for _, item := range page.Items {
 		responses = append(responses, item.ToResponse())
 	}
 
-	writeJSON(w, r, responses)
+	writeJSON(w, r, map[string]any{
+		"items": responses, "total": page.Total, "offset": page.Offset, "limit": page.Limit,
+	})
 }
 
 // HandleCloseOrganization moves a tenant into the terminal closed state.
@@ -111,6 +119,27 @@ func (h *Handler) HandleGetOrganization(w http.ResponseWriter, r *http.Request) 
 	}
 
 	writeJSON(w, r, org.ToResponse())
+}
+
+type OrganizationDetailResponse struct {
+	Organization organizations.OrganizationResponse `json:"organization"`
+	Usage        entitlements.Usage                 `json:"usage"`
+}
+
+func (h *Handler) HandleGetOrganizationDetail(w http.ResponseWriter, r *http.Request) {
+	organizationID := chi.URLParam(r, "organizationID")
+	org, err := h.svc.GetOrganization(r.Context(), organizationID)
+	if err != nil {
+		writeOrganizationError(w, r, err)
+		return
+	}
+	usage, err := h.svc.OrganizationUsage(r.Context(), organizationID)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "load organization usage failed", "error", err)
+		writeError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Unable to load organization usage")
+		return
+	}
+	writeJSON(w, r, OrganizationDetailResponse{Organization: org.ToResponse(), Usage: usage})
 }
 
 // HandleSuspendOrganization suspends a tenant organization.
