@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { SupportSummary, SupportTicket } from "@launchpad/api-client";
 import { ApiError } from "@launchpad/api-client";
-import { EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
+import { EmptyState, MetricCard, PageHeader, Reveal, Surface } from "@launchpad/ui";
 import { getClient } from "@/lib/api";
 import { clearSession, getAccessToken } from "@/lib/session";
 
@@ -113,18 +113,11 @@ export default function SupportPage() {
         {message ? <p className="text-[var(--lp-success)]">{message}</p> : null}
 
         <section className="grid gap-4 sm:grid-cols-5">
-          {[
-            ["Open", summary?.open],
-            ["SLA overdue", summary?.overdue],
-            ["Urgent", summary?.urgent],
-            ["Unassigned", summary?.unassigned],
-            ["Avg response", summary ? `${Math.round(summary.averageFirstResponseMinutes)}m` : undefined],
-          ].map(([label, value]) => (
-            <Surface key={String(label)}>
-              <p className="text-sm text-[var(--lp-ink-muted)]">{label}</p>
-              <p className="mt-2 text-2xl font-semibold">{value ?? "—"}</p>
-            </Surface>
-          ))}
+          <MetricCard icon="inbox" label="Open" value={summary?.open ?? "—"} accent="#3b82f6" />
+          <MetricCard icon="clock" label="SLA overdue" value={summary?.overdue ?? "—"} accent="#dc2626" />
+          <MetricCard icon="flag" label="Urgent" value={summary?.urgent ?? "—"} accent="#f59e0b" />
+          <MetricCard icon="user" label="Unassigned" value={summary?.unassigned ?? "—"} accent="#8b5cf6" />
+          <MetricCard icon="message" label="Avg response" value={summary ? `${Math.round(summary.averageFirstResponseMinutes)}m` : "—"} accent="#0f766e" />
         </section>
 
         <Reveal delay={1}>

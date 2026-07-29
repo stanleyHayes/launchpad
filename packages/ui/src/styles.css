@@ -785,11 +785,11 @@
   position: absolute;
   pointer-events: none;
   user-select: none;
-  color: color-mix(in srgb, var(--lp-ink) 7%, transparent);
+  color: color-mix(in srgb, var(--lp-ink) 12%, transparent);
 }
 
 .lp-watermark--on-dark {
-  color: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.15);
 }
 
 .lp-watermark > svg {

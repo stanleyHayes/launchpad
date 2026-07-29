@@ -120,6 +120,8 @@ export default function DashboardPage() {
               value={overview?.totalLeads ?? (pending ? "…" : "—")}
             />
             <MetricCard
+              icon="message"
+              accent="#0f766e"
               label="Open support tickets"
               value={overview?.openTicketCount ?? (pending ? "…" : "—")}
               hint="Needs platform attention"

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { AccessReviewItem } from "@launchpad/api-client";
 import { ApiError } from "@launchpad/api-client";
-import { EmptyState, PageHeader, Surface } from "@launchpad/ui";
+import { EmptyState, MetricCard, PageHeader, Surface } from "@launchpad/ui";
 import { getClient } from "@/lib/api";
 
 export default function SecurityCenterPage() {
@@ -65,9 +65,9 @@ export default function SecurityCenterPage() {
       <PageHeader eyebrow="Security" title="Security center" description="Review privileged staff access and control time-bounded emergency elevation." />
       {error ? <p role="alert" className="text-[var(--lp-danger)]">{error}</p> : null}
       <section className="grid gap-4 sm:grid-cols-3">
-        <Surface><p className="text-sm text-[var(--lp-ink-muted)]">Staff accounts</p><p className="mt-2 text-3xl font-semibold">{items.length}</p></Surface>
-        <Surface><p className="text-sm text-[var(--lp-ink-muted)]">Reviews due</p><p className="mt-2 text-3xl font-semibold">{due}</p></Surface>
-        <Surface><p className="text-sm text-[var(--lp-ink-muted)]">Active break-glass</p><p className="mt-2 text-3xl font-semibold">{activeBreakGlass}</p></Surface>
+        <MetricCard icon="users" label="Staff accounts" value={items.length} accent="#3b82f6" />
+        <MetricCard icon="clock" label="Reviews due" value={due} accent="#f59e0b" />
+        <MetricCard icon="shield" label="Active break-glass" value={activeBreakGlass} accent="#dc2626" />
       </section>
       <Surface className="overflow-hidden p-0">
         {items.length === 0 ? <div className="p-5"><EmptyState dense title="No staff access records" description="Platform staff appear here for review." /></div> : (

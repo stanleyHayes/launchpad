@@ -108,6 +108,8 @@ export default function DashboardPage() {
               value={me?.organization?.status ?? (pending ? "…" : "—")}
             />
             <MetricCard
+              icon="users"
+              accent="#0f766e"
               label="Employees"
               value={summary?.employeeCount ?? (pending ? "…" : "—")}
             />

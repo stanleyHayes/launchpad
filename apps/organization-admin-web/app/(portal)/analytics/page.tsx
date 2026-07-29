@@ -113,22 +113,32 @@ export default function AnalyticsPage() {
         <Reveal delay={1}>
           <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
             <MetricCard
+              icon="users"
+              accent="#3b82f6"
               label="Employees"
               value={summary?.employeeCount ?? (pending ? "…" : "—")}
             />
             <MetricCard
+              icon="workflow"
+              accent="#8b5cf6"
               label="Active assignments"
               value={summary?.activeAssignmentCount ?? (pending ? "…" : "—")}
             />
             <MetricCard
+              icon="check"
+              accent="#10b981"
               label="Completed"
               value={summary?.completedAssignmentCount ?? (pending ? "…" : "—")}
             />
             <MetricCard
+              icon="clock"
+              accent="#f59e0b"
               label="Pending approvals"
               value={summary?.pendingApprovalCount ?? (pending ? "…" : "—")}
             />
             <MetricCard
+              icon="chart"
+              accent="#dc2626"
               label="Overdue rate"
               value={
                 summary ? `${Math.round(summary.overdueRate * 100)}%` : pending ? "…" : "—"
@@ -141,32 +151,12 @@ export default function AnalyticsPage() {
         <Reveal delay={2}>
           <Surface>
             <h2 className="text-lg font-semibold">Quality signals</h2>
-            <dl className="mt-4 grid gap-4 sm:grid-cols-4">
-              <div>
-                <dt className="text-sm text-[var(--lp-ink-muted)]">Completion rate</dt>
-                <dd className="text-2xl font-semibold">
-                  {summary ? `${Math.round(summary.completionRate * 100)}%` : pending ? "…" : "—"}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-sm text-[var(--lp-ink-muted)]">Avg. days to complete</dt>
-                <dd className="text-2xl font-semibold">
-                  {summary?.averageDaysToComplete ?? (pending ? "…" : "—")}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-sm text-[var(--lp-ink-muted)]">Scheduled</dt>
-                <dd className="text-2xl font-semibold">
-                  {summary?.scheduledAssignmentCount ?? (pending ? "…" : "—")}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-sm text-[var(--lp-ink-muted)]">Incomplete steps</dt>
-                <dd className="text-2xl font-semibold">
-                  {summary?.incompleteStepCount ?? (pending ? "…" : "—")}
-                </dd>
-              </div>
-            </dl>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <MetricCard icon="chart" label="Completion rate" value={summary ? `${Math.round(summary.completionRate * 100)}%` : pending ? "…" : "—"} accent="#10b981" />
+              <MetricCard icon="clock" label="Avg. days to complete" value={summary?.averageDaysToComplete ?? (pending ? "…" : "—")} accent="#3b82f6" />
+              <MetricCard icon="workflow" label="Scheduled" value={summary?.scheduledAssignmentCount ?? (pending ? "…" : "—")} accent="#8b5cf6" />
+              <MetricCard icon="flag" label="Incomplete steps" value={summary?.incompleteStepCount ?? (pending ? "…" : "—")} accent="#f59e0b" />
+            </div>
             {summary ? (
               <p className="mt-4 text-xs text-[var(--lp-ink-muted)]">
                 Generated {new Date(summary.generatedAt).toLocaleString()}
@@ -273,26 +263,11 @@ export default function AnalyticsPage() {
                 Question volume, refusals, and feedback for the AI assistant.
               </p>
             </div>
-            <dl className="grid gap-4 px-5 py-4 sm:grid-cols-3">
-              <div>
-                <dt className="text-sm text-[var(--lp-ink-muted)]">Total questions</dt>
-                <dd className="text-2xl font-semibold">
-                  {report?.totalQuestions ?? (pending ? "…" : "—")}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-sm text-[var(--lp-ink-muted)]">Refusal rate</dt>
-                <dd className="text-2xl font-semibold">
-                  {report ? `${Math.round(report.refusalRate * 100)}%` : pending ? "…" : "—"}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-sm text-[var(--lp-ink-muted)]">Helpful rate</dt>
-                <dd className="text-2xl font-semibold">
-                  {report ? `${Math.round(report.helpfulRate * 100)}%` : pending ? "…" : "—"}
-                </dd>
-              </div>
-            </dl>
+            <div className="grid gap-4 px-5 py-4 sm:grid-cols-3">
+              <MetricCard icon="message" label="Total questions" value={report?.totalQuestions ?? (pending ? "…" : "—")} accent="#3b82f6" />
+              <MetricCard icon="shield" label="Refusal rate" value={report ? `${Math.round(report.refusalRate * 100)}%` : pending ? "…" : "—"} accent="#dc2626" />
+              <MetricCard icon="check" label="Helpful rate" value={report ? `${Math.round(report.helpfulRate * 100)}%` : pending ? "…" : "—"} accent="#10b981" />
+            </div>
             <div className="border-t border-[var(--lp-border)] px-5 py-4">
               <h3 className="text-sm font-semibold">Top refused questions</h3>
               {!report || report.topRefusedQuestions.length === 0 ? (

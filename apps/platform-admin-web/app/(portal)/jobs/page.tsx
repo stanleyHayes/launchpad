@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Delivery, JobStatus, StorageOverview } from "@launchpad/api-client";
 import { ApiError } from "@launchpad/api-client";
-import { EmptyState, PageHeader, Surface } from "@launchpad/ui";
+import { EmptyState, MetricCard, PageHeader, Surface } from "@launchpad/ui";
 import { getClient } from "@/lib/api";
 import { clearSession } from "@/lib/session";
 
@@ -76,9 +76,9 @@ export default function JobsPage() {
         description="Inspect background sweep health and trigger a controlled retry. Every manual run is audited."
       />
       <section className="grid gap-4 sm:grid-cols-3">
-        <Surface><p className="text-sm text-[var(--lp-ink-muted)]">Database objects</p><p className="mt-2 text-2xl font-semibold">{storage?.objects.toLocaleString() ?? "—"}</p></Surface>
-        <Surface><p className="text-sm text-[var(--lp-ink-muted)]">Storage</p><p className="mt-2 text-2xl font-semibold">{storage ? `${(storage.storageSizeBytes / 1_048_576).toFixed(1)} MB` : "—"}</p></Surface>
-        <Surface><p className="text-sm text-[var(--lp-ink-muted)]">Indexes</p><p className="mt-2 text-2xl font-semibold">{storage ? `${(storage.indexSizeBytes / 1_048_576).toFixed(1)} MB` : "—"}</p></Surface>
+        <MetricCard icon="inbox" label="Database objects" value={storage?.objects.toLocaleString() ?? "—"} accent="#3b82f6" />
+        <MetricCard icon="chart" label="Storage" value={storage ? `${(storage.storageSizeBytes / 1_048_576).toFixed(1)} MB` : "—"} accent="#0f766e" />
+        <MetricCard icon="settings" label="Indexes" value={storage ? `${(storage.indexSizeBytes / 1_048_576).toFixed(1)} MB` : "—"} accent="#8b5cf6" />
       </section>
       {error ? <p role="alert" className="text-[var(--lp-danger)]">{error}</p> : null}
       <Surface className="overflow-hidden p-0">

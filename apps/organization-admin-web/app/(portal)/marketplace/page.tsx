@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition, type SyntheticEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { MarketplaceTemplate } from "@launchpad/api-client";
 import { ApiError } from "@launchpad/api-client";
-import { EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
+import { EmptyState, IconWatermark, PageHeader, Reveal, Surface } from "@launchpad/ui";
 import { getClient } from "@/lib/api";
 import { clearSession, getAccessToken } from "@/lib/session";
 
@@ -157,12 +157,14 @@ export default function MarketplacePage() {
                 Choose free distribution to grow your reach, or set a one-time price. LaunchPad retains a 15% marketplace fee on paid sales.
               </p>
               <div className="mt-8 grid grid-cols-2 gap-3">
-                <div className="rounded-[var(--lp-radius)] border border-white/15 p-4">
-                  <p className="text-2xl font-semibold">{mine.length}</p>
+                <div className="relative overflow-hidden rounded-[var(--lp-radius)] border border-white/15 p-4">
+                  <IconWatermark icon="book" onDark className="-bottom-4 -right-4 size-20" />
+                  <p className="relative text-4xl font-semibold leading-none tabular-nums">{mine.length}</p>
                   <p className="text-xs text-white/60">Your submissions</p>
                 </div>
-                <div className="rounded-[var(--lp-radius)] border border-white/15 p-4">
-                  <p className="text-2xl font-semibold">{mine.reduce((sum, item) => sum + item.installationCount, 0)}</p>
+                <div className="relative overflow-hidden rounded-[var(--lp-radius)] border border-white/15 p-4">
+                  <IconWatermark icon="chart" onDark className="-bottom-4 -right-4 size-20" />
+                  <p className="relative text-4xl font-semibold leading-none tabular-nums">{mine.reduce((sum, item) => sum + item.installationCount, 0)}</p>
                   <p className="text-xs text-white/60">Total installs</p>
                 </div>
               </div>

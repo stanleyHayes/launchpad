@@ -26,37 +26,34 @@ export function MetricCard({
   href,
   trend,
 }: MetricCardProps) {
+  const resolvedIcon = icon ?? "chart";
   const card = (
     <div
-      className="lp-card group relative h-full overflow-hidden border-l-[3px] p-5"
+      className="lp-card group relative min-h-44 h-full overflow-hidden border-l-[3px] p-6"
       style={{
         borderLeftColor: accent,
         background: `linear-gradient(135deg, color-mix(in srgb, ${accent} 8%, transparent), transparent 58%)`,
       }}
     >
-      {icon ? (
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute -bottom-3 -right-3 size-20 select-none opacity-[0.07]"
-          style={{ color: accent }}
-        >
-          <Icon name={icon} style={{ width: "100%", height: "100%" }} />
-        </span>
-      ) : null}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute -bottom-5 -right-4 size-28 select-none opacity-[0.11] transition-transform duration-300 group-hover:scale-105"
+        style={{ color: accent }}
+      >
+        <Icon name={resolvedIcon} style={{ width: "100%", height: "100%" }} />
+      </span>
 
       <div className="relative">
         <div className="flex items-start justify-between gap-2">
-          {icon ? (
-            <span
-              className="grid h-9 w-9 place-items-center rounded-[10px] transition-transform group-hover:scale-105"
-              style={{
-                background: `color-mix(in srgb, ${accent} 12%, transparent)`,
-                color: accent,
-              }}
-            >
-              <Icon name={icon} className="h-4.5 w-4.5" />
-            </span>
-          ) : null}
+          <span
+            className="grid h-10 w-10 place-items-center rounded-[11px] transition-transform group-hover:scale-105"
+            style={{
+              background: `color-mix(in srgb, ${accent} 12%, transparent)`,
+              color: accent,
+            }}
+          >
+            <Icon name={resolvedIcon} className="h-5 w-5" />
+          </span>
           {trend !== undefined && trend !== 0 ? (
             <span
               className="flex items-center gap-0.5 text-[10px] font-bold"
@@ -73,12 +70,12 @@ export function MetricCard({
           ) : null}
         </div>
         <p
-          className="mt-3 truncate text-2xl font-semibold tabular-nums text-[var(--lp-ink)]"
+          className="mt-5 truncate text-[clamp(2.35rem,3.4vw,3.75rem)] font-semibold leading-none tracking-[-0.045em] tabular-nums text-[var(--lp-ink)]"
           style={{ fontFamily: "var(--lp-font-display)" }}
         >
           {value}
         </p>
-        <p className="mt-1 truncate text-xs text-[var(--lp-ink-muted)]">{label}</p>
+        <p className="mt-2 truncate text-sm font-medium text-[var(--lp-ink-muted)]">{label}</p>
         {hint ? (
           <p className="mt-1.5 truncate text-[11px] font-semibold" style={{ color: accent }}>
             {hint}

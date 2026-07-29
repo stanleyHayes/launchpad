@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import type { PlatformOrganizationDetail } from "@launchpad/api-client";
 import { ApiError } from "@launchpad/api-client";
-import { PageHeader, Reveal, Surface } from "@launchpad/ui";
+import { IconWatermark, PageHeader, Reveal, Surface, type IconName } from "@launchpad/ui";
 import { getClient } from "@/lib/api";
 import { clearSession, getAccessToken } from "@/lib/session";
 
@@ -14,6 +14,13 @@ const resourceLabels: Record<string, string> = {
   journey_templates: "Journey templates",
   knowledge_documents: "Knowledge documents",
   integrations: "Integrations",
+};
+
+const resourceIcons: Record<string, IconName> = {
+  employees: "users",
+  journey_templates: "workflow",
+  knowledge_documents: "book",
+  integrations: "plug",
 };
 
 function formatDate(value?: string): string {
@@ -163,12 +170,16 @@ export default function OrganizationDetailPage() {
               const unlimited = item.limit < 0;
               const percent = unlimited ? 0 : Math.min(100, Math.round((item.used / item.limit) * 100));
               return (
-                <Surface key={item.resource} className="space-y-5">
+                <Surface key={item.resource} className="relative space-y-5 overflow-hidden">
+                  <IconWatermark
+                    icon={resourceIcons[item.resource] ?? "chart"}
+                    className="-bottom-7 -right-7 size-32 rotate-[-8deg]"
+                  />
                   <div>
                     <p className="text-sm font-semibold text-[var(--lp-ink-muted)]">
                       {resourceLabels[item.resource] ?? item.resource}
                     </p>
-                    <p className="mt-2 text-3xl font-semibold">
+                    <p className="relative mt-3 text-5xl font-semibold leading-none tracking-[-0.04em] tabular-nums">
                       {item.used}
                       <span className="text-base text-[var(--lp-ink-muted)]">
                         {" "}/ {unlimited ? "Unlimited" : item.limit}
