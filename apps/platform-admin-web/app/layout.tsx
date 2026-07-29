@@ -24,7 +24,9 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: lpThemeInitScript }} />
       </head>
-      <body className={`${outfit.variable} antialiased`}>{children}</body>
+      <body suppressHydrationWarning className={`${outfit.variable} antialiased`}>
+        {children}
+      </body>
     </html>
   );
 }

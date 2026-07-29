@@ -52,7 +52,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: jsonLd }}
         />
       </head>
-      <body className={`${outfit.variable} antialiased`}>
+      <body suppressHydrationWarning className={`${outfit.variable} antialiased`}>
         {children}
         <Suspense fallback={null}>
           <PrivacyControls />
