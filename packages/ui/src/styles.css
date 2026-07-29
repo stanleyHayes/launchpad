@@ -251,6 +251,43 @@
   background: var(--lp-paper);
 }
 
+@keyframes lp-empty-state-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-2deg);
+  }
+  50% {
+    transform: translateY(-5px) rotate(2deg);
+  }
+}
+
+@keyframes lp-empty-state-pulse {
+  0%,
+  100% {
+    opacity: 0.22;
+    transform: scale(0.72);
+  }
+  50% {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
+
+.lp-empty-state-icon {
+  position: relative;
+  isolation: isolate;
+  animation: lp-empty-state-float 3s ease-in-out infinite;
+}
+
+.lp-empty-state-icon__halo {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border: 1px solid color-mix(in srgb, var(--lp-accent) 45%, transparent);
+  border-radius: inherit;
+  animation: lp-empty-state-pulse 3s ease-out infinite;
+}
+
 .lp-auth-story {
   background:
     radial-gradient(ellipse 60% 50% at 20% 10%, color-mix(in srgb, var(--lp-brand) 35%, transparent), transparent 55%),

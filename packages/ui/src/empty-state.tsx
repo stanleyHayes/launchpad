@@ -1,10 +1,12 @@
 import type { ReactNode } from "react";
 import { cn } from "./cn";
+import { Icon, type IconName } from "./icon";
 
 export type EmptyStateProps = {
   title: string;
   description?: string;
   action?: ReactNode;
+  icon?: IconName;
   className?: string;
   dense?: boolean;
 };
@@ -13,6 +15,7 @@ export function EmptyState({
   title,
   description,
   action,
+  icon = "inbox",
   className = "",
   dense = false,
 }: EmptyStateProps) {
@@ -24,9 +27,10 @@ export function EmptyState({
         className,
       )}
     >
-      <div className="mx-auto mb-4 grid size-12 place-items-center rounded-full bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]">
-        <span aria-hidden="true" className="text-lg font-semibold">
-          ·
+      <div className="lp-empty-state-icon mx-auto mb-5 grid size-16 place-items-center rounded-[22px] bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]">
+        <span className="lp-empty-state-icon__halo" aria-hidden="true" />
+        <span className="relative grid size-10 place-items-center rounded-2xl bg-[var(--lp-paper-elevated)] shadow-[var(--lp-shadow)]">
+          <Icon name={icon} className="size-5" />
         </span>
       </div>
       <h3

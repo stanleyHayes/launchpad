@@ -86,11 +86,11 @@ export function PortalShell({
   return (
     <div
       className={cn(
-        "lp-portal-frame fixed inset-0 grid h-[100dvh] grid-cols-[288px_1fr] overflow-hidden max-md:grid-cols-1",
+        "lp-portal-frame fixed inset-0 grid h-[100dvh] min-h-0 grid-cols-[288px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] overflow-hidden max-md:grid-cols-1",
         className,
       )}
     >
-      <div className="max-md:hidden">
+      <div className="min-h-0 overflow-hidden max-md:hidden">
         <AppSidebar
           pathname={pathname}
           groups={groups}
@@ -155,7 +155,7 @@ export function PortalShell({
         </div>
       ) : null}
 
-      <div className="flex min-w-0 min-h-0 flex-col">
+      <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
         <header className="lp-portal-header sticky top-0 z-10 flex min-h-[68px] items-center justify-between gap-3 px-4 py-3 md:px-8">
           <div className="flex min-w-0 items-center gap-3">
             <button
@@ -184,7 +184,7 @@ export function PortalShell({
             ) : null}
           </div>
         </header>
-        <main className="lp-portal-workspace min-h-0 flex-1 touch-pan-y overflow-y-scroll overscroll-contain [-webkit-overflow-scrolling:touch]">
+        <main className="lp-portal-workspace h-0 min-h-0 flex-1 touch-pan-y overflow-x-hidden overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]">
           <div className="mx-auto w-full max-w-[var(--lp-max)] px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6 md:px-8 md:pb-8 md:pt-8">
             {children}
           </div>
