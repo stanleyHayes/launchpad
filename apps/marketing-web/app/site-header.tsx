@@ -5,19 +5,26 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { LogoTile, ThemeSwitcher } from "@launchpad/ui";
 import { createLaunchPadClient, type CMSPage } from "@launchpad/api-client";
-import { Icon } from "./ui-icon";
+import { Icon, type IconName } from "./ui-icon";
 import { apiBaseUrl } from "./env";
 
 // Only routes with real content are linked here; add entries back as pages
 // are built or CMS pages are published.
+interface NavLink {
+  href: string;
+  label: string;
+  description: string;
+  icon: IconName;
+}
+
 const navLinks = [
-  { href: "/product", label: "Product" },
-  { href: "/features", label: "Features" },
-  { href: "/solutions", label: "Solutions" },
-  { href: "/integrations", label: "Integrations" },
-  { href: "/resources", label: "Resources" },
-  { href: "/pricing", label: "Pricing" },
-];
+  { href: "/product", label: "Product", description: "How LaunchPad works", icon: "workflow" },
+  { href: "/features", label: "Features", description: "Explore every capability", icon: "sparkles" },
+  { href: "/solutions", label: "Solutions", description: "Paths for every team", icon: "users" },
+  { href: "/integrations", label: "Integrations", description: "Connect your systems", icon: "plug" },
+  { href: "/resources", label: "Resources", description: "Guides and playbooks", icon: "book" },
+  { href: "/pricing", label: "Pricing", description: "Plans that scale", icon: "credit-card" },
+] satisfies NavLink[];
 
 /**
  * SiteHeader is the marketing navigation: a floating translucent "pill" bar
@@ -65,7 +72,12 @@ export function SiteHeader({ variant = "hero" }: { variant?: "hero" | "light" })
     ...navLinks,
     ...cmsLinks
       .filter((page) => !navLinks.some((link) => link.href === `/${page.slug}`))
-      .map((page) => ({ href: `/${page.slug}`, label: page.navLabel ?? page.title })),
+      .map((page): NavLink => ({
+        href: `/${page.slug}`,
+        label: page.navLabel ?? page.title,
+        description: "Company information",
+        icon: "book",
+      })),
   ];
 
   function linkClass(href: string): string {
@@ -160,43 +172,93 @@ export function SiteHeader({ variant = "hero" }: { variant?: "hero" | "light" })
               onClick={() => {
                 setOpen(false);
               }}
-              className="fixed inset-0 z-[-1] bg-[#071426] md:hidden"
+              className="lp-mobile-menu-backdrop fixed inset-0 z-[-1] bg-[#071426] md:hidden"
             />
-            <div className="fixed inset-x-4 bottom-4 top-[5.75rem] overflow-y-auto rounded-3xl bg-[var(--lp-paper-elevated)] p-5 text-[var(--lp-ink)] shadow-[0_24px_80px_rgba(4,14,30,0.45)] md:hidden">
-              <nav className="flex flex-col">
-              {links.map((link) => {
-                const active = pathname === link.href;
-                return (
+            <div className="lp-mobile-menu fixed inset-x-0 bottom-0 top-[5rem] overflow-y-auto border-t border-white/10 bg-[#071426] px-4 pb-5 pt-6 text-white md:hidden">
+              <div className="mx-auto flex min-h-full max-w-md flex-col">
+                <div className="flex items-end justify-between gap-4 px-1">
+                  <div>
+                    <p className="text-sm font-medium text-white/55">Explore LaunchPad</p>
+                    <p className="mt-1 text-2xl font-semibold tracking-tight">
+                      Where do you want to go?
+                    </p>
+                  </div>
                   <Link
-                    key={link.label}
-                    href={link.href}
+                    href={pathname.startsWith("/fr") ? "/" : "/fr"}
+                    hrefLang={pathname.startsWith("/fr") ? "en" : "fr"}
                     onClick={() => {
                       setOpen(false);
                     }}
-                    className={`rounded-xl px-4 py-3 text-base ${
-                      active
-                        ? "bg-[var(--lp-brand-soft)] font-semibold text-[var(--lp-brand)]"
-                        : "font-medium text-[var(--lp-ink)] hover:bg-[var(--lp-brand-soft)]"
-                    }`}
+                    className="rounded-full border border-white/15 px-3 py-1.5 text-xs font-semibold text-white/75"
                   >
-                    {link.label}
+                    {pathname.startsWith("/fr") ? "EN" : "FR"}
                   </Link>
-                );
-              })}
-              <Link
-                href="/signup"
-                onClick={() => {
-                  setOpen(false);
-                }}
-                className="mt-2"
-                style={{ textDecoration: "none" }}
-              >
-                <span className="lp-btn lp-btn--primary w-full">
-                  Start free trial
-                  <Icon name="arrow-right" className="h-4 w-4" />
-                </span>
-              </Link>
-              </nav>
+                </div>
+
+                <nav className="mt-6 grid grid-cols-2 gap-2.5">
+                  {links.map((link) => {
+                    const active =
+                      pathname === link.href || pathname.startsWith(`${link.href}/`);
+                    return (
+                      <Link
+                        key={link.label}
+                        href={link.href}
+                        aria-current={active ? "page" : undefined}
+                        onClick={() => {
+                          setOpen(false);
+                        }}
+                        className={`group min-h-32 rounded-2xl border p-4 transition active:scale-[0.98] ${
+                          active
+                            ? "border-[#5f8de0] bg-[#173b73] text-white"
+                            : "border-white/10 bg-white/[0.055] text-white hover:border-white/20 hover:bg-white/[0.09]"
+                        }`}
+                      >
+                        <span
+                          className={`grid h-9 w-9 place-items-center rounded-xl ${
+                            active
+                              ? "bg-white text-[#173b73]"
+                              : "bg-white/10 text-white/75 group-hover:text-white"
+                          }`}
+                        >
+                          <Icon name={link.icon} className="h-4.5 w-4.5" />
+                        </span>
+                        <span className="mt-4 block text-base font-semibold">{link.label}</span>
+                        <span className="mt-1 block text-xs leading-5 text-white/55">
+                          {link.description}
+                        </span>
+                      </Link>
+                    );
+                  })}
+                </nav>
+
+                <div className="mt-auto pt-6">
+                  <div className="mb-3 flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3">
+                    <span className="text-sm text-white/60">Appearance</span>
+                    <ThemeSwitcher onDark />
+                  </div>
+                  <div className="grid grid-cols-[0.9fr_1.1fr] gap-2.5">
+                    <Link
+                      href="/demo"
+                      onClick={() => {
+                        setOpen(false);
+                      }}
+                      className="grid min-h-12 place-items-center rounded-xl border border-white/20 px-4 text-sm font-semibold text-white transition hover:bg-white/10 active:scale-[0.98]"
+                    >
+                      Book a demo
+                    </Link>
+                    <Link
+                      href="/signup"
+                      onClick={() => {
+                        setOpen(false);
+                      }}
+                      className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-semibold text-[#102b55] transition hover:bg-[#eaf1ff] active:scale-[0.98]"
+                    >
+                      Start free trial
+                      <Icon name="arrow-right" className="h-4 w-4" />
+                    </Link>
+                  </div>
+                </div>
+              </div>
             </div>
           </>
         ) : null}
