@@ -4,7 +4,14 @@ import { useEffect, useState, useTransition, type SyntheticEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { Coupon, Invoice, Plan, Subscription } from "@launchpad/api-client";
 import { ApiError } from "@launchpad/api-client";
-import { Select, EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
+import {
+  Select,
+  EmptyState,
+  PageHeader,
+  Reveal,
+  Surface,
+  ToggleSwitch,
+} from "@launchpad/ui";
 import { getClient } from "@/lib/api";
 import { clearSession, getAccessToken } from "@/lib/session";
 
@@ -20,6 +27,12 @@ function formatPrice(cents: number, currency: string): string {
   }).format(cents / 100);
 }
 
+function featuresFrom(value: string): string[] {
+  return Array.from(new Set(
+    value.split(",").map((feature) => feature.trim()).filter(Boolean),
+  ));
+}
+
 export default function BillingPage() {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -29,6 +42,9 @@ export default function BillingPage() {
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [createActive, setCreateActive] = useState(true);
+  const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
+  const [editingActive, setEditingActive] = useState(true);
 
   function reload(isStale?: () => boolean) {
     startTransition(() => {
@@ -76,6 +92,63 @@ export default function BillingPage() {
         setError(err instanceof ApiError ? err.message : "Unable to create coupon");
       });
     });
+  }
+
+  function onCreatePlan(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setMessage(null);
+    const formEl = event.currentTarget;
+    const form = new FormData(formEl);
+    startTransition(() => {
+      void getClient().createPlatformPlan({
+        code: formString(form, "code"),
+        name: formString(form, "name"),
+        description: formString(form, "description"),
+        priceMonthlyCents: Math.round(Number(formString(form, "monthlyPrice") || "0") * 100),
+        currency: formString(form, "currency") || "USD",
+        features: featuresFrom(formString(form, "features")),
+        active: createActive,
+      }).then((plan) => {
+        formEl.reset();
+        setCreateActive(true);
+        setMessage(`${plan.name} plan created`);
+        reload();
+      }).catch((err: unknown) => {
+        setError(err instanceof ApiError ? err.message : "Unable to create plan");
+      });
+    });
+  }
+
+  function onUpdatePlan(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingPlan) return;
+    setError(null);
+    setMessage(null);
+    const form = new FormData(event.currentTarget);
+    startTransition(() => {
+      void getClient().updatePlatformPlan(editingPlan.code, {
+        name: formString(form, "name"),
+        description: formString(form, "description"),
+        priceMonthlyCents: Math.round(Number(formString(form, "monthlyPrice") || "0") * 100),
+        currency: formString(form, "currency") || "USD",
+        features: featuresFrom(formString(form, "features")),
+        active: editingActive,
+      }).then((plan) => {
+        setEditingPlan(null);
+        setMessage(`${plan.name} plan updated`);
+        reload();
+      }).catch((err: unknown) => {
+        setError(err instanceof ApiError ? err.message : "Unable to update plan");
+      });
+    });
+  }
+
+  function beginEditing(plan: Plan) {
+    setEditingPlan(plan);
+    setEditingActive(plan.active);
+    setError(null);
+    setMessage(null);
   }
 
   async function adjust(invoice: Invoice) {
@@ -165,6 +238,99 @@ export default function BillingPage() {
 
         <Reveal delay={1}>
           <Surface>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="lp-eyebrow">Plan catalog</p>
+                <h2 className="mt-2 text-xl font-semibold">Create a subscription plan</h2>
+                <p className="mt-1 text-sm text-[var(--lp-ink-muted)]">
+                  Define the public price and feature codes used by plan-gated capabilities.
+                </p>
+              </div>
+              <span className="rounded-[var(--lp-radius-input)] bg-[var(--lp-paper)] px-3 py-2 text-xs font-semibold text-[var(--lp-ink-muted)] shadow-[var(--lp-shadow-inset)]">
+                {plans.filter((plan) => plan.active).length} active
+              </span>
+            </div>
+            <form
+              className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4"
+              onSubmit={onCreatePlan}
+            >
+              <label className="text-sm font-semibold">
+                Plan code
+                <input
+                  className="lp-input mt-1.5"
+                  name="code"
+                  placeholder="scale"
+                  pattern="[a-z0-9_-]+"
+                  title="Use lowercase letters, numbers, underscores, or hyphens"
+                  required
+                />
+              </label>
+              <label className="text-sm font-semibold">
+                Display name
+                <input className="lp-input mt-1.5" name="name" placeholder="Scale" required />
+              </label>
+              <label className="text-sm font-semibold">
+                Monthly price
+                <input
+                  className="lp-input mt-1.5"
+                  name="monthlyPrice"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="249.00"
+                  required
+                />
+              </label>
+              <label className="text-sm font-semibold">
+                Currency
+                <Select className="mt-1.5" name="currency" defaultValue="USD">
+                  <option value="USD">USD — US dollar</option>
+                  <option value="GHS">GHS — Ghana cedi</option>
+                  <option value="GBP">GBP — Pound sterling</option>
+                  <option value="EUR">EUR — Euro</option>
+                  <option value="NGN">NGN — Nigerian naira</option>
+                </Select>
+              </label>
+              <label className="text-sm font-semibold md:col-span-2">
+                Description
+                <input
+                  className="lp-input mt-1.5"
+                  name="description"
+                  placeholder="For established teams scaling onboarding operations"
+                />
+              </label>
+              <label className="text-sm font-semibold md:col-span-2">
+                Feature codes
+                <input
+                  className="lp-input mt-1.5"
+                  name="features"
+                  placeholder="core_onboarding, analytics, sso"
+                />
+                <span className="mt-1 block text-xs font-normal text-[var(--lp-ink-muted)]">
+                  Separate feature identifiers with commas.
+                </span>
+              </label>
+              <div className="flex items-center gap-3 md:col-span-2">
+                <ToggleSwitch
+                  checked={createActive}
+                  onChange={setCreateActive}
+                  label="Make new plan active"
+                />
+                <span className="text-sm font-semibold">
+                  {createActive ? "Available for subscriptions" : "Save as inactive"}
+                </span>
+              </div>
+              <div className="flex items-center justify-end md:col-span-2">
+                <button className="lp-btn lp-btn--primary" disabled={pending}>
+                  {pending ? "Saving…" : "Create plan"}
+                </button>
+              </div>
+            </form>
+          </Surface>
+        </Reveal>
+
+        <Reveal delay={1}>
+          <Surface>
             <h2 className="text-lg font-semibold">Set organization subscription</h2>
             <form
               className="mt-4 grid gap-3 md:grid-cols-3"
@@ -228,9 +394,18 @@ export default function BillingPage() {
                             {plan.code} · {plan.active ? "Active" : "Inactive"}
                           </p>
                         </div>
-                        <p className="text-sm font-medium">
-                          {formatPrice(plan.priceMonthlyCents, plan.currency)}/mo
-                        </p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium">
+                            {formatPrice(plan.priceMonthlyCents, plan.currency)}/mo
+                          </p>
+                          <button
+                            type="button"
+                            className="lp-btn lp-btn--quiet !px-3 !py-1.5"
+                            onClick={() => beginEditing(plan)}
+                          >
+                            Edit
+                          </button>
+                        </div>
                       </div>
                       {plan.description ? (
                         <p className="mt-2 text-sm text-[var(--lp-ink-muted)]">{plan.description}</p>
@@ -239,6 +414,87 @@ export default function BillingPage() {
                         <p className="mt-1 text-xs text-[var(--lp-ink-muted)]">
                           Features: {plan.features.join(", ")}
                         </p>
+                      ) : null}
+                      {editingPlan?.code === plan.code ? (
+                        <form
+                          key={plan.updatedAt}
+                          className="mt-4 grid gap-3 rounded-[var(--lp-radius)] bg-[var(--lp-paper)] p-4 shadow-[var(--lp-shadow-inset)] sm:grid-cols-2"
+                          onSubmit={onUpdatePlan}
+                        >
+                          <label className="text-sm font-semibold">
+                            Display name
+                            <input
+                              className="lp-input mt-1.5"
+                              name="name"
+                              defaultValue={plan.name}
+                              required
+                            />
+                          </label>
+                          <label className="text-sm font-semibold">
+                            Monthly price
+                            <input
+                              className="lp-input mt-1.5"
+                              name="monthlyPrice"
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              defaultValue={(plan.priceMonthlyCents / 100).toFixed(2)}
+                              required
+                            />
+                          </label>
+                          <label className="text-sm font-semibold">
+                            Currency
+                            <Select
+                              className="mt-1.5"
+                              name="currency"
+                              defaultValue={plan.currency}
+                            >
+                              <option value="USD">USD — US dollar</option>
+                              <option value="GHS">GHS — Ghana cedi</option>
+                              <option value="GBP">GBP — Pound sterling</option>
+                              <option value="EUR">EUR — Euro</option>
+                              <option value="NGN">NGN — Nigerian naira</option>
+                            </Select>
+                          </label>
+                          <label className="text-sm font-semibold">
+                            Feature codes
+                            <input
+                              className="lp-input mt-1.5"
+                              name="features"
+                              defaultValue={plan.features.join(", ")}
+                            />
+                          </label>
+                          <label className="text-sm font-semibold sm:col-span-2">
+                            Description
+                            <textarea
+                              className="lp-input mt-1.5 min-h-20"
+                              name="description"
+                              defaultValue={plan.description}
+                            />
+                          </label>
+                          <div className="flex items-center gap-3">
+                            <ToggleSwitch
+                              checked={editingActive}
+                              onChange={setEditingActive}
+                              label={`${plan.name} active status`}
+                            />
+                            <span className="text-sm font-semibold">
+                              {editingActive ? "Active" : "Inactive"}
+                            </span>
+                          </div>
+                          <div className="flex justify-end gap-2">
+                            <button
+                              type="button"
+                              className="lp-btn lp-btn--quiet"
+                              onClick={() => setEditingPlan(null)}
+                            >
+                              Cancel
+                            </button>
+                            <button className="lp-btn lp-btn--primary" disabled={pending}>
+                              {pending ? "Saving…" : "Save changes"}
+                            </button>
+                          </div>
+                        </form>
                       ) : null}
                     </li>
                   ))}

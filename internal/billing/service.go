@@ -118,7 +118,7 @@ func (s *Service) CreatePlan(ctx context.Context, in CreatePlanInput) (Plan, err
 	name := strings.TrimSpace(in.Name)
 	currency := strings.TrimSpace(in.Currency)
 
-	if code == "" || name == "" {
+	if code == "" || name == "" || in.PriceMonthlyCents < 0 {
 		return Plan{}, ErrInvalidInput
 	}
 
@@ -172,6 +172,9 @@ func (s *Service) UpdatePlan(ctx context.Context, code string, in UpdatePlanInpu
 	}
 
 	if in.PriceMonthlyCents != nil {
+		if *in.PriceMonthlyCents < 0 {
+			return Plan{}, ErrInvalidInput
+		}
 		plan.PriceMonthlyCents = *in.PriceMonthlyCents
 	}
 

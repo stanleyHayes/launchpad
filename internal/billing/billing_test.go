@@ -218,6 +218,7 @@ func TestCreatePlanRequiresCodeAndName(t *testing.T) {
 		{Name: "No code"},
 		{Code: "no-name"},
 		{Code: "  ", Name: "  "},
+		{Code: "negative", Name: "Negative", PriceMonthlyCents: -1},
 	} {
 		if _, err := svc.CreatePlan(ctx, in); !errors.Is(err, billing.ErrInvalidInput) {
 			t.Fatalf("input %+v: got %v, want ErrInvalidInput", in, err)
@@ -270,6 +271,15 @@ func TestUpdatePlanPatchesFieldsAndValidates(t *testing.T) {
 		err, billing.ErrInvalidInput,
 	) {
 		t.Fatalf("blank name got %v, want ErrInvalidInput", err)
+	}
+
+	negativePrice := -1
+	if _, err := svc.UpdatePlan(
+		ctx,
+		"growth",
+		billing.UpdatePlanInput{PriceMonthlyCents: &negativePrice},
+	); !errors.Is(err, billing.ErrInvalidInput) {
+		t.Fatalf("negative price got %v, want ErrInvalidInput", err)
 	}
 
 	price := 12900
