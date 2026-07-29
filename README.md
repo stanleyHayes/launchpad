@@ -56,6 +56,13 @@ Or run the API in Docker with Mongo/Redis:
 docker compose up --build
 ```
 
+## Deployment
+
+The production topology is a Docker API Blueprint on Render with four
+independent Vercel frontend projects. See
+[Render and Vercel deployment](./docs/deployment/render-vercel.md) for required
+secrets, monorepo root directories, CORS alignment, and verification.
+
 ## Current delivery
 
 - **Phase 0–1:** auth, orgs, departments/roles, employees, journeys, assignments, approvals, notifications, org-admin + employee portals

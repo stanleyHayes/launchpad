@@ -175,6 +175,40 @@ func TestSecurityHeadersWithConfigSetsHSTSOutsideLocal(t *testing.T) {
 	}
 }
 
+func TestCORSAllowsExactAndScopedPreviewOrigins(t *testing.T) {
+	t.Parallel()
+
+	handler := middleware.CORS(
+		[]string{"https://app.launchpad.example"},
+		[]string{"https://launchpad-employee-*.vercel.app"},
+	)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	for _, tc := range []struct {
+		name   string
+		origin string
+		want   string
+	}{
+		{"exact production origin", "https://app.launchpad.example", "https://app.launchpad.example"},
+		{"scoped Vercel preview", "https://launchpad-employee-git-settings-acme.vercel.app", "https://launchpad-employee-git-settings-acme.vercel.app"},
+		{"different Vercel project", "https://unrelated-project.vercel.app", ""},
+		{"malformed origin", "https://launchpad-employee-test.vercel.app/path", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/auth/me", nil)
+			req.Header.Set("Origin", tc.origin)
+			rec := httptest.NewRecorder()
+
+			handler.ServeHTTP(rec, req)
+
+			if got := rec.Header().Get("Access-Control-Allow-Origin"); got != tc.want {
+				t.Fatalf("expected allow origin %q, got %q", tc.want, got)
+			}
+		})
+	}
+}
+
 // servePlatformRoleRequest runs a platform gating middleware against a
 // principal and reports the status the protected handler produced.
 func servePlatformRoleRequest(

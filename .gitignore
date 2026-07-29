@@ -15,4 +15,6 @@ bin/
 .vscode/
 *.tsbuildinfo
 .raven/
+.vercel/
+.pnpm-store/
 credentials.txt

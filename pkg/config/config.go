@@ -53,6 +53,7 @@ type Config struct {
 	InviteTTL                     time.Duration
 	PasswordMinLen                int
 	CORSOrigins                   []string
+	CORSOriginPatterns            []string
 	PlatformOwnerEmail            string
 	PlatformOwnerPassword         string
 	PlatformOwnerName             string
@@ -86,13 +87,14 @@ type Config struct {
 func Load() (Config, error) {
 	cfg := Config{
 		AppEnv:                        getenv("APP_ENV", defaultAppEnv),
-		HTTPAddr:                      getenv("HTTP_ADDR", defaultHTTPAddr),
+		HTTPAddr:                      httpAddr(),
 		MongoURI:                      getenv("MONGODB_URI", defaultMongoURI),
 		MongoDatabase:                 getenv("MONGODB_DATABASE", defaultMongoDatabase),
 		RedisURL:                      getenv("REDIS_URL", defaultRedisURL),
 		JWTSecret:                     os.Getenv("JWT_SECRET"),
 		EncryptionKey:                 strings.TrimSpace(os.Getenv("ENCRYPTION_KEY")),
 		CORSOrigins:                   splitCSV(getenv("CORS_ORIGINS", defaultCORSOrigin)),
+		CORSOriginPatterns:            splitCSV(os.Getenv("CORS_ORIGIN_PATTERNS")),
 		PlatformOwnerEmail:            strings.TrimSpace(os.Getenv("PLATFORM_OWNER_EMAIL")),
 		PlatformOwnerPassword:         os.Getenv("PLATFORM_OWNER_PASSWORD"),
 		PlatformOwnerName:             strings.TrimSpace(os.Getenv("PLATFORM_OWNER_NAME")),
@@ -165,6 +167,19 @@ func Load() (Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// httpAddr supports Render and other twelve-factor hosts that inject PORT,
+// while retaining the explicit HTTP_ADDR override used by local development.
+func httpAddr() string {
+	if value := strings.TrimSpace(os.Getenv("HTTP_ADDR")); value != "" {
+		return value
+	}
+	if port := strings.TrimSpace(os.Getenv("PORT")); port != "" {
+		return ":" + port
+	}
+
+	return defaultHTTPAddr
 }
 
 // validateNonLocal enforces the stricter requirements outside local development.

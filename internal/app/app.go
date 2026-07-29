@@ -1410,7 +1410,7 @@ func newRouter(
 
 	router.Use(chimw.Recoverer)
 	router.Use(middleware.SecurityHeadersWithConfig(cfg.AppEnv))
-	router.Use(middleware.CORS(cfg.CORSOrigins))
+	router.Use(middleware.CORS(cfg.CORSOrigins, cfg.CORSOriginPatterns))
 
 	router.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		if err := httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"}); err != nil {

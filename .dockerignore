@@ -1,0 +1,13 @@
+.git
+.github
+.next
+.pnpm-store
+node_modules
+coverage
+coverage.out
+*.log
+.env
+.env.*
+credentials.txt
+apps/*-web
+docs

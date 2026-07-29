@@ -1,0 +1,109 @@
+services:
+  - type: keyvalue
+    name: launchpad-redis
+    plan: free
+    region: frankfurt
+    ipAllowList: []
+    maxmemoryPolicy: allkeys-lru
+    persistenceMode: "off"
+
+  - type: web
+    name: launchpad-api
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    dockerCommand: /app/launchpad-api
+    healthCheckPath: /healthz
+    autoDeployTrigger: checksPass
+    buildFilter:
+      paths:
+        - apps/api/**
+        - internal/**
+        - pkg/**
+        - go.mod
+        - go.sum
+        - render.yaml
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_DATABASE
+        value: launchpad
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: launchpad-redis
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      - key: JWT_ACCESS_TTL
+        value: 15m
+      - key: JWT_REFRESH_TTL
+        value: 168h
+      - key: INVITE_TTL
+        value: 72h
+      - key: PASSWORD_MIN_LENGTH
+        value: "10"
+      - key: CORS_ORIGINS
+        sync: false
+      - key: CORS_ORIGIN_PATTERNS
+        sync: false
+      - key: API_PUBLIC_URL
+        sync: false
+      - key: ORG_ADMIN_URL
+        sync: false
+      - key: PLATFORM_OWNER_EMAIL
+        sync: false
+      - key: PLATFORM_OWNER_PASSWORD
+        sync: false
+      - key: PLATFORM_OWNER_NAME
+        value: Platform Owner
+      - key: SCHEDULER_INTERVAL
+        value: 15m
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ASSISTANT_MODEL
+        value: claude-opus-4-8
+      - key: EMAIL_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: EMAIL_BASE_URL
+        value: https://api.resend.com
+      - key: SMS_API_KEY
+        sync: false
+      - key: SMS_FROM
+        value: LaunchPad
+      - key: SMS_BASE_URL
+        sync: false
+      - key: ERROR_TRACKING_URL
+        sync: false
+      - key: TRACING_EXPORT_URL
+        sync: false
+      - key: OBSERVABILITY_TOKEN
+        sync: false
+      - key: GOOGLE_CALENDAR_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CALENDAR_CLIENT_SECRET
+        sync: false
+      - key: MICROSOFT_CALENDAR_CLIENT_ID
+        sync: false
+      - key: MICROSOFT_CALENDAR_CLIENT_SECRET
+        sync: false
+      - key: MICROSOFT_CALENDAR_TENANT
+        value: common
+      - key: SAML_SP_PRIVATE_KEY
+        sync: false
+      - key: SAML_SP_CERTIFICATE
+        sync: false
+      - key: PAYSTACK_SECRET_KEY
+        sync: false
+      - key: PAYSTACK_WEBHOOK_SECRET
+        sync: false
+      - key: PAYSTACK_BASE_URL
+        sync: false

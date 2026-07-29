@@ -11,4 +11,5 @@ RUN apk add --no-cache ca-certificates
 WORKDIR /app
 COPY --from=build /bin/launchpad-api /app/launchpad-api
 EXPOSE 8080
+USER 65532:65532
 ENTRYPOINT ["/app/launchpad-api"]

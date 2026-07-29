@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -159,8 +160,10 @@ func securityHeaders(appEnv string) func(http.Handler) http.Handler {
 	}
 }
 
-// CORS restricts cross-origin requests to the configured origins.
-func CORS(origins []string) func(http.Handler) http.Handler {
+// CORS restricts cross-origin requests to configured exact origins or narrow
+// wildcard patterns. Patterns are intended for provider-generated preview
+// hosts, for example https://launchpad-marketing-*.vercel.app.
+func CORS(origins, originPatterns []string) func(http.Handler) http.Handler {
 	allowed := make(map[string]struct{}, len(origins))
 	for _, origin := range origins {
 		allowed[origin] = struct{}{}
@@ -169,7 +172,7 @@ func CORS(origins []string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
-			if _, ok := allowed[origin]; ok {
+			if originAllowed(origin, allowed, originPatterns) {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 				w.Header().Set("Vary", "Origin")
 				w.Header().Set(
@@ -189,6 +192,40 @@ func CORS(origins []string) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func originAllowed(origin string, exact map[string]struct{}, patterns []string) bool {
+	if origin == "" {
+		return false
+	}
+
+	if _, ok := exact[origin]; ok {
+		return true
+	}
+
+	parsed, err := url.Parse(origin)
+	if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") ||
+		parsed.Host == "" || parsed.User != nil || parsed.Path != "" ||
+		parsed.RawQuery != "" || parsed.Fragment != "" {
+		return false
+	}
+
+	for _, pattern := range patterns {
+		if strings.Count(pattern, "*") != 1 {
+			continue
+		}
+
+		parts := strings.SplitN(pattern, "*", 2)
+		if parts[0] == "" || parts[1] == "" {
+			continue
+		}
+
+		if strings.HasPrefix(origin, parts[0]) && strings.HasSuffix(origin, parts[1]) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // RequestLogger logs each request with slog. Health probes (/healthz,
