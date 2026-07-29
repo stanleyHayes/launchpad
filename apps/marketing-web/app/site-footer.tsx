@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Container, LogoTile, LogoWatermark } from "@launchpad/ui";
 import { orgAdminUrl } from "./env";
 import { NewsletterForm } from "./newsletter-form";
+import { FooterLink } from "./footer-link";
 
 // Only links with real destinations are listed; more columns return as pages
 // are built or CMS pages are published.
@@ -67,12 +68,7 @@ export function SiteFooter() {
               <ul className="mt-5 space-y-3 text-sm">
                 {column.links.map((link) => (
                   <li key={link.label}>
-                    <Link
-                      href={link.href}
-                      className="text-[var(--lp-ink-muted)] transition hover:text-[var(--lp-brand)]"
-                    >
-                      {link.label}
-                    </Link>
+                    <FooterLink href={link.href}>{link.label}</FooterLink>
                   </li>
                 ))}
               </ul>
