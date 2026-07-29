@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"launchpad/internal/app"
 	"launchpad/pkg/config"
@@ -16,6 +17,8 @@ import (
 	mongox "launchpad/pkg/mongo"
 	redisx "launchpad/pkg/redis"
 )
+
+const mongoCloseTimeout = 5 * time.Second
 
 func main() {
 	if err := run(); err != nil {
@@ -40,7 +43,10 @@ func run() (err error) {
 		return fmt.Errorf("connect to MongoDB: %w", mongoErr)
 	}
 	defer func() {
-		closeErr := mongoDB.Close(context.WithoutCancel(ctx))
+		closeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), mongoCloseTimeout)
+		defer cancel()
+
+		closeErr := mongoDB.Close(closeCtx)
 		if closeErr != nil {
 			err = errors.Join(err, closeErr)
 		}

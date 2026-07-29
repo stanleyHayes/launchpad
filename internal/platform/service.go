@@ -30,24 +30,87 @@ type OpenTicketCounter interface {
 	CountOpen(ctx context.Context) (int64, error)
 }
 
+// AccountCreator provisions a login account for a new staff member and
+// returns the new user id.
+type AccountCreator interface {
+	CreateAccount(ctx context.Context, email, displayName, password string) (string, error)
+}
+
+// MailSender sends transactional email. Satisfied by email.Sender.
+type MailSender interface {
+	Send(ctx context.Context, to, subject, html string) error
+}
+
 // Service implements platform staff use cases.
 type Service struct {
-	repo    Repository
-	orgs    OrganizationReader
-	leads   LeadCounter
-	support OpenTicketCounter
+	repo           Repository
+	orgs           OrganizationReader
+	leads          LeadCounter
+	support        OpenTicketCounter
+	readiness      *ReadinessDeps
+	accounts       AccountCreator
+	mailer         MailSender
+	revenueMetrics func(context.Context) (RevenueMetrics, error)
+	supportMetrics func(context.Context) (SupportMetrics, error)
+	storageMetrics func(context.Context) (StorageOverview, error)
+}
+
+func (s *Service) WithStorageMetrics(loader func(context.Context) (StorageOverview, error)) *Service {
+	s.storageMetrics = loader
+	return s
+}
+
+func (s *Service) StorageOverview(ctx context.Context) (StorageOverview, error) {
+	if s.storageMetrics == nil {
+		return StorageOverview{}, ErrInvalidInput
+	}
+	overview, err := s.storageMetrics(ctx)
+	if err != nil {
+		return StorageOverview{}, fmt.Errorf("load storage metrics: %w", err)
+	}
+	return overview, nil
+}
+
+func (s *Service) WithBusinessMetrics(
+	revenue func(context.Context) (RevenueMetrics, error),
+	support func(context.Context) (SupportMetrics, error),
+) *Service {
+	s.revenueMetrics, s.supportMetrics = revenue, support
+	return s
 }
 
 // NewService constructs a Service.
 func NewService(repo Repository, orgs OrganizationReader, leadsSvc LeadCounter, supportSvc OpenTicketCounter) *Service {
-	return &Service{repo: repo, orgs: orgs, leads: leadsSvc, support: supportSvc}
+	return &Service{
+		repo: repo, orgs: orgs, leads: leadsSvc, support: supportSvc,
+		readiness: nil, accounts: nil, mailer: nil,
+	}
 }
 
-// GetByUserID returns an active staff record.
+// WithAccounts wires staff account provisioning: account creation plus the
+// optional invite sender (nil sender returns the temp password to the
+// operator instead of emailing it).
+func (s *Service) WithAccounts(accounts AccountCreator, mailer MailSender) *Service {
+	s.accounts = accounts
+	s.mailer = mailer
+
+	return s
+}
+
+// GetByUserID returns an active staff record; deactivated records resolve to
+// ErrNotFound so the platform login path rejects them (defense in depth on
+// top of the store's active-only query).
 func (s *Service) GetByUserID(ctx context.Context, userID string) (Staff, error) {
 	staff, err := s.repo.GetByUserID(ctx, userID)
 	if err != nil {
 		return Staff{}, fmt.Errorf("get platform staff: %w", err)
+	}
+
+	if staff.Status != staffStatusActive {
+		return Staff{}, ErrNotFound
+	}
+	if grant := staff.BreakGlass; grant != nil && grant.RevokedAt == nil && grant.ExpiresAt.After(time.Now().UTC()) {
+		staff.RoleCode = grant.RoleCode
 	}
 
 	return staff, nil
@@ -95,14 +158,39 @@ func (s *Service) EnsureStaff(ctx context.Context, userID, roleCode string) (Sta
 	return staff, nil
 }
 
-// ListOrganizations returns all tenant organizations.
-func (s *Service) ListOrganizations(ctx context.Context) ([]organizations.Organization, error) {
+// ListOrganizations returns tenant organizations matching the optional
+// platform-directory filters.
+func (s *Service) ListOrganizations(
+	ctx context.Context,
+	input ...OrganizationListInput,
+) ([]organizations.Organization, error) {
 	items, err := s.orgs.List(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list organizations: %w", err)
 	}
 
-	return items, nil
+	if len(input) == 0 {
+		return items, nil
+	}
+
+	filter := input[0].normalized()
+	out := make([]organizations.Organization, 0, len(items))
+	for _, item := range items {
+		if filter.Status != "" && strings.ToLower(item.Status) != filter.Status {
+			continue
+		}
+		if filter.PlanCode != "" && strings.ToLower(item.PlanCode) != filter.PlanCode {
+			continue
+		}
+		if filter.Search != "" &&
+			!strings.Contains(strings.ToLower(item.Name), filter.Search) &&
+			!strings.Contains(strings.ToLower(item.Slug), filter.Search) {
+			continue
+		}
+		out = append(out, item)
+	}
+
+	return out, nil
 }
 
 // GetOrganization returns one tenant organization.
@@ -144,6 +232,20 @@ func (s *Service) Overview(ctx context.Context) (Overview, error) {
 	if err != nil {
 		return Overview{}, fmt.Errorf("count open support tickets: %w", err)
 	}
+	var revenue RevenueMetrics
+	if s.revenueMetrics != nil {
+		revenue, err = s.revenueMetrics(ctx)
+		if err != nil {
+			return Overview{}, fmt.Errorf("load revenue metrics: %w", err)
+		}
+	}
+	var support SupportMetrics
+	if s.supportMetrics != nil {
+		support, err = s.supportMetrics(ctx)
+		if err != nil {
+			return Overview{}, fmt.Errorf("load support metrics: %w", err)
+		}
+	}
 
 	var total int64
 	for _, count := range counts {
@@ -151,11 +253,16 @@ func (s *Service) Overview(ctx context.Context) (Overview, error) {
 	}
 
 	return Overview{
-		TotalOrgs:       total,
-		TrialOrgs:       counts[organizations.StatusTrial()],
-		ActiveOrgs:      counts[organizations.StatusActive()],
-		SuspendedOrgs:   counts[organizations.StatusSuspended()],
-		TotalLeads:      totalLeads,
-		OpenTicketCount: openTickets,
+		TotalOrgs:           total,
+		TrialOrgs:           counts[organizations.StatusTrial()],
+		ActiveOrgs:          counts[organizations.StatusActive()],
+		SuspendedOrgs:       counts[organizations.StatusSuspended()],
+		TotalLeads:          totalLeads,
+		OpenTicketCount:     openTickets,
+		OverdueTicketCount:  support.Overdue,
+		UrgentTicketCount:   support.Urgent,
+		MRRTotalCents:       revenue.MRRTotalCents,
+		ARRTotalCents:       revenue.ARRTotalCents,
+		ActiveSubscriptions: revenue.ActiveSubscriptions,
 	}, nil
 }

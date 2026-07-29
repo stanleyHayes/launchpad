@@ -2,6 +2,9 @@
 
 import type { ReactNode } from "react";
 import { AppSidebar, type NavGroup } from "./app-sidebar";
+import { LogoTile } from "./logo-tile";
+import { ThemeSwitcher } from "./theme-switcher";
+import { UserMenu, type UserMenuItem, type UserMenuUser } from "./user-menu";
 import { cn } from "./cn";
 
 export type PortalShellProps = {
@@ -13,6 +16,9 @@ export type PortalShellProps = {
   userLabel?: string;
   groups: NavGroup[];
   onLogout?: () => void;
+  user?: UserMenuUser;
+  userMenuItems?: UserMenuItem[];
+  workspaceSwitcher?: ReactNode;
   children: ReactNode;
   className?: string;
 };
@@ -31,6 +37,9 @@ export function PortalShell({
   userLabel,
   groups,
   onLogout,
+  user,
+  userMenuItems,
+  workspaceSwitcher,
   children,
   className = "",
 }: PortalShellProps) {
@@ -49,9 +58,7 @@ export function PortalShell({
           onNavigate={onNavigate}
           brand={
             <div className="flex min-w-0 items-center gap-3">
-              <span className="grid size-11 shrink-0 place-items-center rounded-2xl border border-white/10 bg-white/[0.07] text-sm font-bold tracking-tight text-white">
-                LP
-              </span>
+              <LogoTile size={44} />
               <span className="min-w-0">
                 <span
                   className="block truncate text-lg font-semibold tracking-tight"
@@ -80,32 +87,40 @@ export function PortalShell({
       </div>
 
       <div className="flex min-h-0 flex-col">
-        <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-[var(--lp-border)] bg-white/80 px-4 py-3 backdrop-blur md:px-8">
+        <header className="lp-portal-header sticky top-0 z-10 flex items-center justify-between gap-4 px-4 py-3 md:px-8">
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-[var(--lp-ink)]">
-              {orgLabel ?? "Organization"}
-            </p>
+            {workspaceSwitcher ?? (
+              <p className="truncate text-sm font-semibold text-[var(--lp-ink)]">
+                {orgLabel ?? "Organization"}
+              </p>
+            )}
             <p className="truncate text-xs text-[var(--lp-ink-muted)]">
               {userLabel ?? workspaceLabel}
             </p>
           </div>
-          <nav className="flex flex-wrap gap-2 md:hidden">
-            {groups.flatMap((group) =>
-              group.items.map((item) => (
-                <a
-                  key={item.href}
-                  href={item.href}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    onNavigate(item.href);
-                  }}
-                  className="rounded-full border border-[var(--lp-border)] bg-white px-3 py-1 text-xs font-semibold text-[var(--lp-ink)]"
-                >
-                  {item.label}
-                </a>
-              )),
-            )}
-          </nav>
+          <div className="flex items-center gap-3">
+            <ThemeSwitcher className="max-md:hidden" />
+            {user ? (
+              <UserMenu user={user} items={userMenuItems} onNavigate={onNavigate} onLogout={onLogout} />
+            ) : null}
+            <nav className="flex flex-wrap gap-2 md:hidden">
+              {groups.flatMap((group) =>
+                group.items.map((item) => (
+                  <a
+                    key={item.href}
+                    href={item.href}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      onNavigate(item.href);
+                    }}
+                    className="rounded-full border border-[var(--lp-border)] bg-white px-3 py-1 text-xs font-semibold text-[var(--lp-ink)]"
+                  >
+                    {item.label}
+                  </a>
+                )),
+              )}
+            </nav>
+          </div>
         </header>
         <main className="lp-portal-workspace min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-[var(--lp-max)] px-4 py-6 md:px-8 md:py-8">

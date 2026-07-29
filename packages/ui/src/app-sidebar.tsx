@@ -2,10 +2,13 @@
 
 import type { ReactNode } from "react";
 import { cn } from "./cn";
+import { Icon, type IconName } from "./icon";
 
 export type NavItem = {
   label: string;
   href: string;
+  icon?: IconName;
+  badge?: number;
 };
 
 export type NavGroup = {
@@ -27,24 +30,10 @@ function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function Tick({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 16 12" className={className} aria-hidden="true">
-      <path
-        d="M1 6.5 5.2 10.5 15 1"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={2.4}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 /**
- * Dark navy command-center sidebar with grouped nav and accent ticks.
- * Pattern shared with AuraEDU / Back2u / Oguaaman admin shells.
+ * Dark navy command-center sidebar (kedland pattern): icon chips in bordered
+ * nodes, tree-connector lines from each group heading, and a layered active
+ * state (accent left bar + signal wash + hairline).
  */
 export function AppSidebar({
   brand,
@@ -72,13 +61,14 @@ export function AppSidebar({
             <p className="mb-2 px-2 font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-white/35">
               {group.heading}
             </p>
-            <ul className="space-y-1">
+            <ul className="lp-nav-branch space-y-1">
               {group.items.map((item) => {
                 const active = isActive(pathname, item.href);
                 return (
                   <li key={item.href}>
                     <a
                       href={item.href}
+                      aria-current={active ? "page" : undefined}
                       onClick={(event) => {
                         if (!onNavigate) {
                           return;
@@ -86,15 +76,21 @@ export function AppSidebar({
                         event.preventDefault();
                         onNavigate(item.href);
                       }}
-                      className={cn(
-                        "relative flex items-center justify-between rounded-[10px] px-3 py-2.5 text-sm font-medium transition",
-                        active
-                          ? "bg-white/10 text-white shadow-[inset_3px_0_0_var(--lp-signal)]"
-                          : "text-white/70 hover:bg-white/5 hover:text-white",
-                      )}
+                      className={cn("lp-nav-item", active && "lp-nav-item--active")}
                     >
-                      <span>{item.label}</span>
-                      {active ? <Tick className="size-3.5 text-[var(--lp-signal)]" /> : null}
+                      {item.icon ? (
+                        <span className="lp-nav-node">
+                          <Icon name={item.icon} className="h-3.5 w-3.5" />
+                        </span>
+                      ) : null}
+                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                      {item.badge !== undefined && item.badge > 0 ? (
+                        <span className="lp-nav-badge">
+                          {item.badge > 99 ? "99+" : item.badge}
+                        </span>
+                      ) : active ? (
+                        <span className="lp-nav-dot" aria-hidden="true" />
+                      ) : null}
                     </a>
                   </li>
                 );

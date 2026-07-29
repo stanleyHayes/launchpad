@@ -58,11 +58,59 @@ func (s *Store) GetByUserID(ctx context.Context, userID string) (platform.Staff,
 	return staff, nil
 }
 
+// GetByID loads a staff record by id, regardless of status, so platform
+// administrators can review and reactivate deactivated accounts.
+func (s *Store) GetByID(ctx context.Context, staffID string) (platform.Staff, error) {
+	var staff platform.Staff
+
+	err := s.col.FindOne(ctx, bson.M{"_id": staffID}).Decode(&staff)
+	if errors.Is(err, drivermongo.ErrNoDocuments) {
+		return platform.Staff{}, platform.ErrNotFound
+	}
+
+	if err != nil {
+		return platform.Staff{}, fmt.Errorf("find platform staff: %w", err)
+	}
+
+	return staff, nil
+}
+
+// List returns all staff records ordered by creation time.
+func (s *Store) List(ctx context.Context) ([]platform.Staff, error) {
+	cursor, err := s.col.Find(ctx, bson.M{}, options.Find().SetSort(bson.D{{Key: "createdAt", Value: 1}}))
+	if err != nil {
+		return nil, fmt.Errorf("list platform staff: %w", err)
+	}
+
+	defer func() { _ = cursor.Close(ctx) }()
+
+	items := []platform.Staff{}
+	if err := cursor.All(ctx, &items); err != nil {
+		return nil, fmt.Errorf("decode platform staff: %w", err)
+	}
+
+	return items, nil
+}
+
 // Create inserts a staff record.
 func (s *Store) Create(ctx context.Context, staff platform.Staff) error {
 	_, err := s.col.InsertOne(ctx, staff)
 	if err != nil {
 		return fmt.Errorf("insert platform staff: %w", err)
+	}
+
+	return nil
+}
+
+// Update replaces a staff record (role, status).
+func (s *Store) Update(ctx context.Context, staff platform.Staff) error {
+	result, err := s.col.ReplaceOne(ctx, bson.M{"_id": staff.ID}, staff)
+	if err != nil {
+		return fmt.Errorf("replace platform staff: %w", err)
+	}
+
+	if result.MatchedCount == 0 {
+		return platform.ErrNotFound
 	}
 
 	return nil

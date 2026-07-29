@@ -16,6 +16,7 @@ import (
 const (
 	fieldID             = "_id"
 	fieldOrganizationID = "organizationId"
+	fieldEmployeeID     = "employeeId"
 	fieldStatus         = "status"
 	fieldCreatedAt      = "createdAt"
 
@@ -28,15 +29,19 @@ var _ support.Repository = (*Store)(nil)
 
 // Store is the MongoDB support repository.
 type Store struct {
-	col *drivermongo.Collection
+	col      *drivermongo.Collection
+	blockers *drivermongo.Collection
 }
 
 // NewStore constructs a Store.
 func NewStore(db *drivermongo.Database) *Store {
-	return &Store{col: db.Collection("support_tickets")}
+	return &Store{
+		col:      db.Collection("support_tickets"),
+		blockers: db.Collection("support_blockers"),
+	}
 }
 
-// EnsureIndexes creates support ticket indexes.
+// EnsureIndexes creates support ticket and blocker indexes.
 func (s *Store) EnsureIndexes(ctx context.Context) error {
 	_, err := s.col.Indexes().CreateMany(ctx, []drivermongo.IndexModel{
 		{Keys: bson.D{{Key: fieldOrganizationID, Value: 1}, {Key: fieldCreatedAt, Value: -1}}},
@@ -44,6 +49,14 @@ func (s *Store) EnsureIndexes(ctx context.Context) error {
 	})
 	if err != nil {
 		return fmt.Errorf("ensure support ticket indexes: %w", err)
+	}
+
+	_, err = s.blockers.Indexes().CreateMany(ctx, []drivermongo.IndexModel{
+		{Keys: bson.D{{Key: fieldOrganizationID, Value: 1}, {Key: fieldCreatedAt, Value: -1}}},
+		{Keys: bson.D{{Key: fieldOrganizationID, Value: 1}, {Key: fieldEmployeeID, Value: 1}}},
+	})
+	if err != nil {
+		return fmt.Errorf("ensure support blocker indexes: %w", err)
 	}
 
 	return nil
@@ -96,35 +109,7 @@ func (s *Store) GetByIDForOrganization(ctx context.Context, organizationID, id s
 
 // ListByOrganization returns tickets for a tenant.
 func (s *Store) ListByOrganization(ctx context.Context, organizationID string) ([]support.Ticket, error) {
-	cursor, err := s.col.Find(
-		ctx,
-		bson.M{fieldOrganizationID: organizationID},
-		options.Find().SetSort(bson.D{{Key: fieldCreatedAt, Value: -1}}),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("find support tickets: %w", err)
-	}
-
-	items := make([]support.Ticket, 0)
-	decodeErr := cursor.All(ctx, &items)
-	closeErr := cursor.Close(ctx)
-
-	if decodeErr != nil && closeErr != nil {
-		return nil, errors.Join(
-			fmt.Errorf("decode support tickets: %w", decodeErr),
-			fmt.Errorf("close support tickets cursor: %w", closeErr),
-		)
-	}
-
-	if decodeErr != nil {
-		return nil, fmt.Errorf("decode support tickets: %w", decodeErr)
-	}
-
-	if closeErr != nil {
-		return nil, fmt.Errorf("close support tickets cursor: %w", closeErr)
-	}
-
-	return items, nil
+	return listForOrganization[support.Ticket](ctx, s.col, organizationID, "support tickets")
 }
 
 // ListAll returns all support tickets.
@@ -180,4 +165,76 @@ func (s *Store) CountOpen(ctx context.Context) (int64, error) {
 	}
 
 	return count, nil
+}
+
+// CreateBlocker inserts an employee blocker.
+func (s *Store) CreateBlocker(ctx context.Context, blocker support.Blocker) error {
+	_, err := s.blockers.InsertOne(ctx, blocker)
+	if err != nil {
+		return fmt.Errorf("insert blocker: %w", err)
+	}
+
+	return nil
+}
+
+// ListBlockers returns blockers for a tenant, newest first.
+func (s *Store) ListBlockers(ctx context.Context, organizationID string) ([]support.Blocker, error) {
+	return listForOrganization[support.Blocker](ctx, s.blockers, organizationID, "blockers")
+}
+
+// listForOrganization returns documents of one collection for a tenant,
+// newest first.
+func listForOrganization[T any](
+	ctx context.Context,
+	col *drivermongo.Collection,
+	organizationID, entity string,
+) ([]T, error) {
+	cursor, err := col.Find(
+		ctx,
+		bson.M{fieldOrganizationID: organizationID},
+		options.Find().SetSort(bson.D{{Key: fieldCreatedAt, Value: -1}}),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find %s: %w", entity, err)
+	}
+
+	items := make([]T, 0)
+	decodeErr := cursor.All(ctx, &items)
+	closeErr := cursor.Close(ctx)
+
+	if decodeErr != nil && closeErr != nil {
+		return nil, errors.Join(
+			fmt.Errorf("decode %s: %w", entity, decodeErr),
+			fmt.Errorf("close %s cursor: %w", entity, closeErr),
+		)
+	}
+
+	if decodeErr != nil {
+		return nil, fmt.Errorf("decode %s: %w", entity, decodeErr)
+	}
+
+	if closeErr != nil {
+		return nil, fmt.Errorf("close %s cursor: %w", entity, closeErr)
+	}
+
+	return items, nil
+}
+
+// DeleteForOrganization removes every support ticket and blocker of the
+// organization and returns the number of documents deleted. It serves only
+// the platform GDPR tenant purge (PRD 7.4).
+func (s *Store) DeleteForOrganization(ctx context.Context, organizationID string) (int64, error) {
+	res, err := s.col.DeleteMany(ctx, bson.M{fieldOrganizationID: organizationID})
+	if err != nil {
+		return 0, fmt.Errorf("delete support tickets for organization: %w", err)
+	}
+
+	deleted := res.DeletedCount
+
+	res, err = s.blockers.DeleteMany(ctx, bson.M{fieldOrganizationID: organizationID})
+	if err != nil {
+		return 0, fmt.Errorf("delete support blockers for organization: %w", err)
+	}
+
+	return deleted + res.DeletedCount, nil
 }

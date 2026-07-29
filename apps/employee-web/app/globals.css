@@ -1,6 +1,11 @@
 @import "tailwindcss";
 @import "@launchpad/ui/styles.css";
 
+/* Tailwind v4 skips node_modules when auto-detecting class sources, so the
+   workspace UI package (symlinked) must be scanned explicitly or its
+   component classes (AuthShell, PortalShell, …) never generate. */
+@source "../../../packages/ui/src";
+
 html,
 body {
   margin: 0;

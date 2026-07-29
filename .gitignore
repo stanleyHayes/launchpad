@@ -13,3 +13,5 @@ bin/
 *.test
 .idea/
 .vscode/
+*.tsbuildinfo
+.raven/

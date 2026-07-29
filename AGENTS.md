@@ -8,7 +8,7 @@ Operating procedures for human and AI agents.
 2. Create or update contracts before implementation.
 3. Implement domain logic in `internal/<domain>`.
 4. Wire routes in `apps/api`.
-5. Add Mongo indexes in `migrations` / `scripts/migrate_indexes` when collections change.
+5. Add Mongo indexes to the shared registry (`MongoIndexers` in `internal/app`, also run by `scripts/migrate_indexes`) when collections change.
 6. Add unit or integration tests.
 7. Update docs if behavior or APIs change.
 
@@ -36,6 +36,11 @@ Otherwise use clear conventional messages focused on why.
 - Repository interfaces live in the domain package
 - Mongo documents do not leak as API responses
 - Cross-module calls use explicit interfaces
+- Authorization: platform routes use `middleware.RequirePlatform`; tenant
+  writes are gated per route with `middleware.RequirePermission`
+  (`resource.action` codes from `internal/roles`); handler-level
+  `organizations.CanManageOrganization` checks stay for ownership/manager
+  logic
 
 ## Local commands
 

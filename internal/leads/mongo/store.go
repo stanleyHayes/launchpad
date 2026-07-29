@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	drivermongo "go.mongodb.org/mongo-driver/v2/mongo"
@@ -15,7 +16,11 @@ import (
 
 var _ leads.Repository = (*Store)(nil)
 
-const fieldCreatedAt = "createdAt"
+const (
+	fieldCreatedAt   = "createdAt"
+	defaultListLimit = int64(50)
+	maxListLimit     = int64(500)
+)
 
 // Store is the MongoDB leads repository.
 type Store struct {
@@ -50,9 +55,24 @@ func (s *Store) Create(ctx context.Context, lead leads.Lead) error {
 	return nil
 }
 
-// List returns leads ordered by newest first.
-func (s *Store) List(ctx context.Context) ([]leads.Lead, error) {
-	cursor, err := s.col.Find(ctx, bson.M{}, options.Find().SetSort(bson.D{{Key: fieldCreatedAt, Value: -1}}))
+// List returns up to limit leads ordered by newest first. When before is
+// non-zero, only leads created before that instant are returned (keyset
+// pagination); a limit outside (0, maxListLimit] falls back to the default.
+func (s *Store) List(ctx context.Context, limit int64, before time.Time) ([]leads.Lead, error) {
+	if limit <= 0 || limit > maxListLimit {
+		limit = defaultListLimit
+	}
+
+	filter := bson.M{}
+	if !before.IsZero() {
+		filter[fieldCreatedAt] = bson.M{"$lt": before}
+	}
+
+	cursor, err := s.col.Find(
+		ctx,
+		filter,
+		options.Find().SetSort(bson.D{{Key: fieldCreatedAt, Value: -1}}).SetLimit(limit),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("find leads: %w", err)
 	}

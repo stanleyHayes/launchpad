@@ -20,8 +20,9 @@ var (
 )
 
 const (
-	statusInvited = "invited"
-	statusActive  = "active"
+	statusInvited    = "invited"
+	statusActive     = "active"
+	statusOffboarded = "offboarded"
 )
 
 // Employee is a tenant-scoped employee record.
@@ -33,9 +34,13 @@ type Employee struct {
 	FirstName         string         `bson:"firstName"                   json:"firstName"`
 	LastName          string         `bson:"lastName"                    json:"lastName"`
 	WorkEmail         string         `bson:"workEmail"                   json:"workEmail"`
+	MobilePhone       string         `bson:"mobilePhone,omitempty"       json:"mobilePhone,omitempty"`
 	JobRoleID         string         `bson:"jobRoleId,omitempty"         json:"jobRoleId,omitempty"`
 	DepartmentID      string         `bson:"departmentId,omitempty"      json:"departmentId,omitempty"`
 	ManagerEmployeeID string         `bson:"managerEmployeeId,omitempty" json:"managerEmployeeId,omitempty"`
+	BuddyEmployeeID   string         `bson:"buddyEmployeeId,omitempty"   json:"buddyEmployeeId,omitempty"`
+	Team              string         `bson:"team,omitempty"              json:"team,omitempty"`
+	Location          string         `bson:"location,omitempty"          json:"location,omitempty"`
 	StartDate         time.Time      `bson:"startDate"                   json:"startDate"`
 	Status            string         `bson:"status"                      json:"status"`
 	Metadata          map[string]any `bson:"metadata"                    json:"metadata"`
@@ -49,9 +54,13 @@ type CreateInput struct {
 	FirstName         string
 	LastName          string
 	WorkEmail         string
+	MobilePhone       string
 	JobRoleID         string
 	DepartmentID      string
 	ManagerEmployeeID string
+	BuddyEmployeeID   string
+	Team              string
+	Location          string
 	StartDate         time.Time
 }
 
@@ -60,8 +69,21 @@ type UpdateInput struct {
 	FirstName         *string
 	LastName          *string
 	EmployeeNumber    *string
+	MobilePhone       *string
 	JobRoleID         *string
 	DepartmentID      *string
 	ManagerEmployeeID *string
+	BuddyEmployeeID   *string
+	Team              *string
+	Location          *string
 	Status            *string
+}
+
+type Contact struct {
+	ID        string `json:"id"`
+	Kind      string `json:"kind"`
+	Name      string `json:"name"`
+	WorkEmail string `json:"workEmail"`
+	Team      string `json:"team,omitempty"`
+	Location  string `json:"location,omitempty"`
 }

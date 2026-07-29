@@ -20,6 +20,7 @@ var (
 
 const (
 	statusDraft     = "draft"
+	statusScheduled = "scheduled"
 	statusPublished = "published"
 )
 
@@ -30,7 +31,11 @@ type Page struct {
 	Title       string     `bson:"title"                 json:"title"`
 	Summary     string     `bson:"summary"               json:"summary"`
 	Body        string     `bson:"body"                  json:"body"`
+	ContentType string     `bson:"contentType"           json:"contentType"`
+	NavLabel    string     `bson:"navLabel,omitempty"    json:"navLabel,omitempty"`
+	NavOrder    int        `bson:"navOrder,omitempty"    json:"navOrder,omitempty"`
 	Status      string     `bson:"status"                json:"status"`
+	ScheduledAt *time.Time `bson:"scheduledAt,omitempty" json:"scheduledAt,omitempty"`
 	PublishedAt *time.Time `bson:"publishedAt,omitempty" json:"publishedAt,omitempty"`
 	CreatedAt   time.Time  `bson:"createdAt"             json:"createdAt"`
 	UpdatedAt   time.Time  `bson:"updatedAt"             json:"updatedAt"`
@@ -38,17 +43,23 @@ type Page struct {
 
 // CreateInput creates a draft CMS page.
 type CreateInput struct {
-	Slug    string
-	Title   string
-	Summary string
-	Body    string
+	Slug        string
+	Title       string
+	Summary     string
+	Body        string
+	ContentType string
+	NavLabel    string
+	NavOrder    int
 }
 
 // UpdateInput updates mutable CMS page fields.
 type UpdateInput struct {
-	Title   *string
-	Summary *string
-	Body    *string
+	Title       *string
+	Summary     *string
+	Body        *string
+	ContentType *string
+	NavLabel    *string
+	NavOrder    *int
 }
 
 // Repository persists CMS pages.

@@ -7,7 +7,6 @@ import (
 	"net/http"
 
 	"launchpad/internal/audit"
-	"launchpad/internal/organizations"
 	"launchpad/pkg/httpx"
 	"launchpad/pkg/security"
 )
@@ -106,7 +105,9 @@ func (h *Handler) createNamedResource(
 	auditAction, resourceType string,
 	createFn func(context.Context, string, string, string) (namedCreateResult, error),
 ) {
-	principal, ok := requireManager(w, r)
+	// Authorization is enforced by the route-level RequirePermission
+	// (departments.manage); the handler only needs the authenticated principal.
+	principal, ok := requirePrincipal(w, r)
 	if !ok {
 		return
 	}
@@ -138,10 +139,9 @@ func (h *Handler) createNamedResource(
 		created.resourceID,
 		map[string]any{"name": body.Name},
 	); err != nil {
+		// The resource is already persisted; a failed audit write must not
+		// turn a committed change into a reported failure.
 		slog.ErrorContext(r.Context(), "audit named resource create failed", "error", err, "action", auditAction)
-		writeError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Unable to record audit event")
-
-		return
 	}
 
 	writeJSON(w, r, http.StatusCreated, created.payload)
@@ -151,21 +151,6 @@ func requirePrincipal(w http.ResponseWriter, r *http.Request) (security.Principa
 	principal, ok := security.PrincipalFromContext(r.Context())
 	if !ok {
 		writeError(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
-
-		return security.Principal{}, false
-	}
-
-	return principal, true
-}
-
-func requireManager(w http.ResponseWriter, r *http.Request) (security.Principal, bool) {
-	principal, ok := requirePrincipal(w, r)
-	if !ok {
-		return security.Principal{}, false
-	}
-
-	if !organizations.CanManageOrganization(principal.RoleCode) {
-		writeError(w, r, http.StatusForbidden, "FORBIDDEN", "Insufficient permissions")
 
 		return security.Principal{}, false
 	}

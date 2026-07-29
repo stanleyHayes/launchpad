@@ -3,9 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --port 3302",
+    "dev": "next dev --port 3002",
     "build": "next build",
-    "start": "next start --port 3302",
+    "start": "next start --port 3002",
     "lint": "eslint ."
   },
   "dependencies": {
@@ -13,7 +13,8 @@
     "@launchpad/ui": "workspace:*",
     "next": "^16.2.11",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@launchpad/typescript-config": "workspace:*",

@@ -25,6 +25,7 @@ var _ featureflags.Repository = (*Store)(nil)
 type Store struct {
 	flags     *drivermongo.Collection
 	overrides *drivermongo.Collection
+	history   *drivermongo.Collection
 }
 
 // NewStore constructs a Store.
@@ -32,6 +33,7 @@ func NewStore(db *drivermongo.Database) *Store {
 	return &Store{
 		flags:     db.Collection("feature_flags"),
 		overrides: db.Collection("feature_flag_overrides"),
+		history:   db.Collection("feature_flag_history"),
 	}
 }
 
@@ -47,7 +49,45 @@ func (s *Store) EnsureIndexes(ctx context.Context) error {
 		return fmt.Errorf("ensure feature flag override indexes: %w", err)
 	}
 
+	_, err = s.history.Indexes().CreateMany(ctx, []drivermongo.IndexModel{
+		{Keys: bson.D{{Key: fieldKey, Value: 1}, {Key: "createdAt", Value: -1}}},
+	})
+	if err != nil {
+		return fmt.Errorf("ensure feature flag history indexes: %w", err)
+	}
+
 	return nil
+}
+
+// AppendHistory persists an immutable rollout mutation.
+func (s *Store) AppendHistory(ctx context.Context, history featureflags.History) error {
+	if _, err := s.history.InsertOne(ctx, history); err != nil {
+		return fmt.Errorf("insert feature flag history: %w", err)
+	}
+	return nil
+}
+
+// ListHistory returns newest-first rollout mutations for one flag.
+func (s *Store) ListHistory(
+	ctx context.Context,
+	key string,
+	limit int64,
+) ([]featureflags.History, error) {
+	cursor, err := s.history.Find(
+		ctx,
+		bson.M{fieldKey: key},
+		options.Find().SetSort(bson.D{{Key: "createdAt", Value: -1}}).SetLimit(limit),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find feature flag history: %w", err)
+	}
+	items := make([]featureflags.History, 0)
+	decodeErr := cursor.All(ctx, &items)
+	closeErr := cursor.Close(ctx)
+	if decodeErr != nil || closeErr != nil {
+		return nil, errors.Join(decodeErr, closeErr)
+	}
+	return items, nil
 }
 
 // UpsertFlag inserts or replaces a flag by key.
@@ -135,38 +175,25 @@ func (s *Store) UpdateFlag(ctx context.Context, flag featureflags.Flag) error {
 	return nil
 }
 
-// UpsertOverride inserts or replaces a tenant override.
+// UpsertOverride inserts or updates a tenant override in a single atomic
+// upsert, so concurrent writers can't race into duplicate-key errors.
 func (s *Store) UpsertOverride(ctx context.Context, override featureflags.Override) error {
 	filter := bson.M{
 		fieldOrganizationID: override.OrganizationID,
 		fieldKey:            override.Key,
 	}
-
-	var existing featureflags.Override
-
-	err := s.overrides.FindOne(ctx, filter).Decode(&existing)
-	if err != nil && !errors.Is(err, drivermongo.ErrNoDocuments) {
-		return fmt.Errorf("find feature flag override: %w", err)
+	update := bson.M{
+		"$set": bson.M{
+			"enabled":   override.Enabled,
+			"updatedAt": override.UpdatedAt,
+			"updatedBy": override.UpdatedBy,
+		},
+		"$setOnInsert": bson.M{fieldID: override.ID},
 	}
 
-	if errors.Is(err, drivermongo.ErrNoDocuments) {
-		_, insertErr := s.overrides.InsertOne(ctx, override)
-		if insertErr != nil {
-			return fmt.Errorf("insert feature flag override: %w", insertErr)
-		}
-
-		return nil
-	}
-
-	override.ID = existing.ID
-
-	res, replaceErr := s.overrides.ReplaceOne(ctx, bson.M{fieldID: existing.ID}, override)
-	if replaceErr != nil {
-		return fmt.Errorf("replace feature flag override: %w", replaceErr)
-	}
-
-	if res.MatchedCount == 0 {
-		return featureflags.ErrNotFound
+	_, err := s.overrides.UpdateOne(ctx, filter, update, options.UpdateOne().SetUpsert(true))
+	if err != nil {
+		return fmt.Errorf("upsert feature flag override: %w", err)
 	}
 
 	return nil
@@ -221,4 +248,17 @@ func (s *Store) ListOverridesByOrganization(
 	}
 
 	return items, nil
+}
+
+// DeleteForOrganization removes every feature-flag override of the
+// organization and returns the number deleted. Flag definitions are
+// platform-wide and are kept. It serves only the platform GDPR tenant purge
+// (PRD 7.4).
+func (s *Store) DeleteForOrganization(ctx context.Context, organizationID string) (int64, error) {
+	res, err := s.overrides.DeleteMany(ctx, bson.M{fieldOrganizationID: organizationID})
+	if err != nil {
+		return 0, fmt.Errorf("delete feature flag overrides for organization: %w", err)
+	}
+
+	return res.DeletedCount, nil
 }

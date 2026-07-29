@@ -8,18 +8,20 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"launchpad/internal/audit"
 	"launchpad/pkg/httpx"
 	"launchpad/pkg/security"
 )
 
 // Handler exposes support HTTP endpoints.
 type Handler struct {
-	svc *Service
+	svc   *Service
+	audit *audit.Service
 }
 
 // NewHandler constructs a support Handler.
-func NewHandler(svc *Service) *Handler {
-	return &Handler{svc: svc}
+func NewHandler(svc *Service, auditSvc *audit.Service) *Handler {
+	return &Handler{svc: svc, audit: auditSvc}
 }
 
 // HandleOrgList lists tickets for the current organization.
@@ -37,7 +39,7 @@ func (h *Handler) HandleOrgList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, r, http.StatusOK, items)
+	writeJSON(w, r, http.StatusOK, toTicketResponses(items))
 }
 
 // HandleOrgCreate creates a support ticket.
@@ -51,9 +53,17 @@ func (h *Handler) HandleOrgCreate(w http.ResponseWriter, r *http.Request) {
 		Subject  string `json:"subject"`
 		Body     string `json:"body"`
 		Priority string `json:"priority"`
+		Category string `json:"category"`
 	}
 	if err := httpx.DecodeJSON(r, &body); err != nil {
 		writeError(w, r, http.StatusBadRequest, "INVALID_JSON", "Request body is invalid")
+
+		return
+	}
+
+	// Categories are optional and reuse the blocker taxonomy (hr/it/manager/other).
+	if body.Category != "" && !isValidBlockerCategory(body.Category) {
+		writeError(w, r, http.StatusBadRequest, "INVALID_INPUT", "Category must be one of hr, it, manager, other")
 
 		return
 	}
@@ -64,6 +74,7 @@ func (h *Handler) HandleOrgCreate(w http.ResponseWriter, r *http.Request) {
 		Subject:         body.Subject,
 		Body:            body.Body,
 		Priority:        body.Priority,
+		Category:        body.Category,
 	})
 	if err != nil {
 		writeSupportError(w, r, err)
@@ -71,7 +82,7 @@ func (h *Handler) HandleOrgCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, r, http.StatusCreated, ticket)
+	writeJSON(w, r, http.StatusCreated, ticket.ToResponse())
 }
 
 // HandleOrgGet returns one ticket for the current organization.
@@ -92,7 +103,32 @@ func (h *Handler) HandleOrgGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, r, http.StatusOK, ticket)
+	writeJSON(w, r, http.StatusOK, ticket.ToResponse())
+}
+
+func (h *Handler) HandleOrgAddMessage(w http.ResponseWriter, r *http.Request) {
+	principal, ok := requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+	ticketID := chi.URLParam(r, "ticketID")
+	if _, err := h.svc.GetForOrganization(r.Context(), principal.OrganizationID, ticketID); err != nil {
+		writeSupportError(w, r, err)
+		return
+	}
+	var body struct {
+		Body string `json:"body"`
+	}
+	if err := httpx.DecodeJSON(r, &body); err != nil {
+		writeError(w, r, http.StatusBadRequest, "INVALID_JSON", "Request body is invalid")
+		return
+	}
+	ticket, err := h.svc.AddMessage(r.Context(), ticketID, principal.UserID, body.Body, false)
+	if err != nil {
+		writeSupportError(w, r, err)
+		return
+	}
+	writeJSON(w, r, http.StatusOK, ticket.ToResponse())
 }
 
 // HandlePlatformList lists all support tickets.
@@ -105,7 +141,7 @@ func (h *Handler) HandlePlatformList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, r, http.StatusOK, items)
+	writeJSON(w, r, http.StatusOK, toTicketResponses(items))
 }
 
 // HandlePlatformGet returns one support ticket.
@@ -117,11 +153,76 @@ func (h *Handler) HandlePlatformGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, r, http.StatusOK, ticket)
+	writeJSON(w, r, http.StatusOK, ticket.ToResponse())
+}
+
+func (h *Handler) HandlePlatformSummary(w http.ResponseWriter, r *http.Request) {
+	summary, err := h.svc.Summary(r.Context())
+	if err != nil {
+		writeSupportError(w, r, err)
+		return
+	}
+	writeJSON(w, r, http.StatusOK, summary)
+}
+
+func (h *Handler) HandlePlatformAddMessage(w http.ResponseWriter, r *http.Request) {
+	principal, ok := requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		Body     string `json:"body"`
+		Internal bool   `json:"internal"`
+	}
+	if err := httpx.DecodeJSON(r, &body); err != nil {
+		writeError(w, r, http.StatusBadRequest, "INVALID_JSON", "Request body is invalid")
+		return
+	}
+	ticket, err := h.svc.AddMessage(r.Context(), chi.URLParam(r, "ticketID"), principal.UserID, body.Body, body.Internal)
+	if err != nil {
+		writeSupportError(w, r, err)
+		return
+	}
+	orgID := ticket.OrganizationID
+	if err := h.audit.Record(r.Context(), &orgID, principal.UserID, "support_ticket.message_added", "support_ticket", ticket.ID, map[string]any{"internal": body.Internal}); err != nil {
+		writeError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Unable to record audit event")
+		return
+	}
+	writeJSON(w, r, http.StatusOK, ticket.ToResponse())
+}
+
+func (h *Handler) HandlePlatformEscalate(w http.ResponseWriter, r *http.Request) {
+	principal, ok := requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		AssigneeUserID string `json:"assigneeUserId"`
+	}
+	if err := httpx.DecodeJSON(r, &body); err != nil {
+		writeError(w, r, http.StatusBadRequest, "INVALID_JSON", "Request body is invalid")
+		return
+	}
+	ticket, err := h.svc.Escalate(r.Context(), chi.URLParam(r, "ticketID"), body.AssigneeUserID)
+	if err != nil {
+		writeSupportError(w, r, err)
+		return
+	}
+	orgID := ticket.OrganizationID
+	if err := h.audit.Record(r.Context(), &orgID, principal.UserID, "support_ticket.escalated", "support_ticket", ticket.ID, map[string]any{"assigneeUserId": ticket.AssigneeUserID}); err != nil {
+		writeError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Unable to record audit event")
+		return
+	}
+	writeJSON(w, r, http.StatusOK, ticket.ToResponse())
 }
 
 // HandlePlatformUpdateStatus updates ticket workflow state.
 func (h *Handler) HandlePlatformUpdateStatus(w http.ResponseWriter, r *http.Request) {
+	principal, ok := requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+
 	var body struct {
 		Status         string  `json:"status"`
 		AssigneeUserID *string `json:"assigneeUserId"`
@@ -143,7 +244,23 @@ func (h *Handler) HandlePlatformUpdateStatus(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	writeJSON(w, r, http.StatusOK, ticket)
+	orgID := ticket.OrganizationID
+	if err := h.audit.Record(
+		r.Context(),
+		&orgID,
+		principal.UserID,
+		"support_ticket.status_updated",
+		"support_ticket",
+		ticket.ID,
+		map[string]any{"status": ticket.Status},
+	); err != nil {
+		slog.ErrorContext(r.Context(), "audit support ticket status update failed", "error", err)
+		writeError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Unable to record audit event")
+
+		return
+	}
+
+	writeJSON(w, r, http.StatusOK, ticket.ToResponse())
 }
 
 func requirePrincipal(w http.ResponseWriter, r *http.Request) (security.Principal, bool) {

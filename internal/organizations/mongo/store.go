@@ -19,6 +19,7 @@ const (
 	fieldUserID         = "userId"
 	fieldOrganizationID = "organizationId"
 	fieldID             = "_id"
+	fieldStatus         = "status"
 
 	membershipStatusActive = "active"
 )
@@ -69,6 +70,16 @@ func (s *Store) CreateOrganization(ctx context.Context, org organizations.Organi
 
 	if err != nil {
 		return fmt.Errorf("insert organization: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteOrganization removes an organization by id. It is used to compensate a
+// failed CreateWithOwner so the slug is not burned.
+func (s *Store) DeleteOrganization(ctx context.Context, id string) error {
+	if _, err := s.orgs.DeleteOne(ctx, bson.M{fieldID: id}); err != nil {
+		return fmt.Errorf("delete organization: %w", err)
 	}
 
 	return nil
@@ -195,14 +206,54 @@ func (s *Store) Update(ctx context.Context, org organizations.Organization) erro
 	return nil
 }
 
-// CreateMembership inserts a membership.
+// CreateMembership inserts a membership. A duplicate (organization, user)
+// pair maps to organizations.ErrAlreadyMember so callers can treat an
+// existing membership as the goal state on retry.
 func (s *Store) CreateMembership(ctx context.Context, membership organizations.Membership) error {
 	_, err := s.memberships.InsertOne(ctx, membership)
+	if drivermongo.IsDuplicateKeyError(err) {
+		return organizations.ErrAlreadyMember
+	}
+
 	if err != nil {
 		return fmt.Errorf("insert membership: %w", err)
 	}
 
 	return nil
+}
+
+// UpdateMembershipStatus sets a membership's status, matching by tenant and user
+// regardless of the current status so a suspended membership can be reactivated
+// in place.
+func (s *Store) UpdateMembershipStatus(ctx context.Context, organizationID, userID, status string) error {
+	res, err := s.memberships.UpdateOne(
+		ctx,
+		bson.M{fieldOrganizationID: organizationID, fieldUserID: userID},
+		bson.M{"$set": bson.M{fieldStatus: status}},
+	)
+	if err != nil {
+		return fmt.Errorf("update membership status: %w", err)
+	}
+
+	if res.MatchedCount == 0 {
+		return organizations.ErrNotFound
+	}
+
+	return nil
+}
+
+// MembershipExists reports whether the user has a membership in the organization
+// of any status (active or suspended).
+func (s *Store) MembershipExists(ctx context.Context, organizationID, userID string) (bool, error) {
+	count, err := s.memberships.CountDocuments(ctx, bson.M{
+		fieldOrganizationID: organizationID,
+		fieldUserID:         userID,
+	})
+	if err != nil {
+		return false, fmt.Errorf("count membership: %w", err)
+	}
+
+	return count > 0, nil
 }
 
 // GetMembership loads an active membership.
@@ -212,7 +263,7 @@ func (s *Store) GetMembership(ctx context.Context, organizationID, userID string
 	err := s.memberships.FindOne(ctx, bson.M{
 		fieldOrganizationID: organizationID,
 		fieldUserID:         userID,
-		"status":            membershipStatusActive,
+		fieldStatus:         membershipStatusActive,
 	}).Decode(&membership)
 	if errors.Is(err, drivermongo.ErrNoDocuments) {
 		return organizations.Membership{}, organizations.ErrNotFound
@@ -227,7 +278,7 @@ func (s *Store) GetMembership(ctx context.Context, organizationID, userID string
 
 // ListMembershipsByUser lists active memberships for a user.
 func (s *Store) ListMembershipsByUser(ctx context.Context, userID string) ([]organizations.Membership, error) {
-	cursor, err := s.memberships.Find(ctx, bson.M{fieldUserID: userID, "status": membershipStatusActive})
+	cursor, err := s.memberships.Find(ctx, bson.M{fieldUserID: userID, fieldStatus: membershipStatusActive})
 	if err != nil {
 		return nil, fmt.Errorf("find memberships: %w", err)
 	}
@@ -252,4 +303,93 @@ func (s *Store) ListMembershipsByUser(ctx context.Context, userID string) ([]org
 	}
 
 	return items, nil
+}
+
+// ListMemberships lists active memberships in an organization, ordered by
+// creation time.
+func (s *Store) ListMemberships(ctx context.Context, organizationID string) ([]organizations.Membership, error) {
+	cursor, err := s.memberships.Find(
+		ctx,
+		bson.M{fieldOrganizationID: organizationID, fieldStatus: membershipStatusActive},
+		options.Find().SetSort(bson.D{{Key: "createdAt", Value: 1}}),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find memberships: %w", err)
+	}
+
+	items := make([]organizations.Membership, 0)
+	decodeErr := cursor.All(ctx, &items)
+	closeErr := cursor.Close(ctx)
+
+	if decodeErr != nil && closeErr != nil {
+		return nil, errors.Join(
+			fmt.Errorf("decode memberships: %w", decodeErr),
+			fmt.Errorf("close memberships cursor: %w", closeErr),
+		)
+	}
+
+	if decodeErr != nil {
+		return nil, fmt.Errorf("decode memberships: %w", decodeErr)
+	}
+
+	if closeErr != nil {
+		return nil, fmt.Errorf("close memberships cursor: %w", closeErr)
+	}
+
+	return items, nil
+}
+
+// UpdateMembershipRole sets a membership's role, matching by tenant and user
+// regardless of the current status so a suspended member's role can be
+// corrected before reactivation.
+func (s *Store) UpdateMembershipRole(ctx context.Context, organizationID, userID, roleCode string) error {
+	res, err := s.memberships.UpdateOne(
+		ctx,
+		bson.M{fieldOrganizationID: organizationID, fieldUserID: userID},
+		bson.M{"$set": bson.M{"roleCode": roleCode}},
+	)
+	if err != nil {
+		return fmt.Errorf("update membership role: %w", err)
+	}
+
+	if res.MatchedCount == 0 {
+		return organizations.ErrNotFound
+	}
+
+	return nil
+}
+
+// CountMembershipsByRole counts active memberships with a role in an
+// organization, used to guard demotion of the last organization_owner.
+func (s *Store) CountMembershipsByRole(ctx context.Context, organizationID, roleCode string) (int64, error) {
+	count, err := s.memberships.CountDocuments(ctx, bson.M{
+		fieldOrganizationID: organizationID,
+		fieldStatus:         membershipStatusActive,
+		"roleCode":          roleCode,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("count memberships by role: %w", err)
+	}
+
+	return count, nil
+}
+
+// DeleteForOrganization removes every membership of the organization and the
+// organization document itself, returning the number of documents deleted.
+// It serves only the platform GDPR tenant purge (PRD 7.4); unlike
+// DeleteOrganization it is not a compensation for a failed signup.
+func (s *Store) DeleteForOrganization(ctx context.Context, organizationID string) (int64, error) {
+	res, err := s.memberships.DeleteMany(ctx, bson.M{fieldOrganizationID: organizationID})
+	if err != nil {
+		return 0, fmt.Errorf("delete memberships for organization: %w", err)
+	}
+
+	deleted := res.DeletedCount
+
+	res, err = s.orgs.DeleteMany(ctx, bson.M{fieldID: organizationID})
+	if err != nil {
+		return 0, fmt.Errorf("delete organization document: %w", err)
+	}
+
+	return deleted + res.DeletedCount, nil
 }

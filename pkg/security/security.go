@@ -33,6 +33,30 @@ type Principal struct {
 	OrganizationID string
 	RoleCode       string
 	SessionID      string
+	// Impersonator marks a platform support impersonation token (PRD 5.2.2):
+	// UserID stays the support agent, while OrganizationID/RoleCode address
+	// the target tenant. ImpersonationSessionID identifies the backing
+	// support session so audit events and token validation can reference it.
+	Impersonator           bool
+	ImpersonationSessionID string
+}
+
+// ImpersonatorPermissions returns the fixed read-only permission set granted
+// to platform support impersonation tokens (PRD 5.2.2). It covers only gated
+// reads; tenant read routes without a permission gate (journeys, support
+// tickets, blockers) stay open to any organization member, and every write
+// permission — billing.manage, members.*, integrations.*, and the rest — is
+// deliberately absent so an impersonation token can never mutate tenant
+// state, change billing/subscriptions, purge organizations, or change
+// platform settings.
+func ImpersonatorPermissions() map[string]struct{} {
+	return map[string]struct{}{
+		"employees.read":     {},
+		"assignments.read":   {},
+		"analytics.read":     {},
+		"audit.read":         {},
+		"notifications.read": {},
+	}
 }
 
 type contextKey string
@@ -91,16 +115,22 @@ type Claims struct {
 	OrganizationID string `json:"organizationId"`
 	RoleCode       string `json:"roleCode"`
 	SessionID      string `json:"sessionId"`
+	// Impersonator/ImpersonationSessionID mark platform support impersonation
+	// tokens (PRD 5.2.2); both are empty on ordinary access tokens.
+	Impersonator           bool   `json:"impersonator,omitempty"`
+	ImpersonationSessionID string `json:"impersonationSessionId,omitempty"`
 }
 
 // IssueAccessToken creates a signed JWT access token.
 func IssueAccessToken(secret string, ttl time.Duration, principal Principal) (string, error) {
 	now := time.Now().UTC()
 	claims := Claims{
-		Email:          principal.Email,
-		OrganizationID: principal.OrganizationID,
-		RoleCode:       principal.RoleCode,
-		SessionID:      principal.SessionID,
+		Email:                  principal.Email,
+		OrganizationID:         principal.OrganizationID,
+		RoleCode:               principal.RoleCode,
+		SessionID:              principal.SessionID,
+		Impersonator:           principal.Impersonator,
+		ImpersonationSessionID: principal.ImpersonationSessionID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   principal.UserID,
 			ID:        uuid.NewString(),
@@ -122,13 +152,18 @@ func IssueAccessToken(secret string, ttl time.Duration, principal Principal) (st
 
 // ParseAccessToken validates and parses an access token.
 func ParseAccessToken(secret, tokenString string) (Principal, error) {
-	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(parsed *jwt.Token) (any, error) {
-		if parsed.Method != jwt.SigningMethodHS256 {
-			return nil, errUnexpectedSigningMethod
-		}
+	token, err := jwt.ParseWithClaims(
+		tokenString,
+		&Claims{},
+		func(parsed *jwt.Token) (any, error) {
+			if parsed.Method != jwt.SigningMethodHS256 {
+				return nil, errUnexpectedSigningMethod
+			}
 
-		return []byte(secret), nil
-	})
+			return []byte(secret), nil
+		},
+		jwt.WithIssuer(tokenIssuer),
+	)
 	if err != nil {
 		return Principal{}, fmt.Errorf("parse access token: %w", err)
 	}
@@ -139,10 +174,12 @@ func ParseAccessToken(secret, tokenString string) (Principal, error) {
 	}
 
 	return Principal{
-		UserID:         claims.Subject,
-		Email:          claims.Email,
-		OrganizationID: claims.OrganizationID,
-		RoleCode:       claims.RoleCode,
-		SessionID:      claims.SessionID,
+		UserID:                 claims.Subject,
+		Email:                  claims.Email,
+		OrganizationID:         claims.OrganizationID,
+		RoleCode:               claims.RoleCode,
+		SessionID:              claims.SessionID,
+		Impersonator:           claims.Impersonator,
+		ImpersonationSessionID: claims.ImpersonationSessionID,
 	}, nil
 }

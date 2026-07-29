@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { cn } from "./cn";
+import { LogoTile } from "./logo-tile";
+import { LogoWatermark } from "./logo-watermark";
 
 export type AuthShellProps = {
   brandName?: string;
@@ -23,8 +25,9 @@ export function AuthShell({
   className = "",
 }: AuthShellProps) {
   return (
-    <div className={cn("grid min-h-screen lg:grid-cols-[48%_1fr]", className)}>
+    <div className={cn("grid min-h-dvh lg:grid-cols-[48%_1fr]", className)}>
       <div className="lp-auth-story relative hidden flex-col justify-between overflow-hidden p-12 text-white lg:flex">
+        <LogoWatermark onDark className="-right-24 -top-16 size-96 rotate-[-8deg]" />
         <span
           aria-hidden="true"
           className="absolute -right-24 -top-24 size-96 rounded-full bg-[var(--lp-accent)]/25 blur-3xl"
@@ -33,12 +36,15 @@ export function AuthShell({
           aria-hidden="true"
           className="absolute -bottom-32 left-8 size-80 rounded-full bg-[var(--lp-signal)]/20 blur-3xl"
         />
-        <p
-          className="relative z-10 text-2xl font-semibold tracking-tight"
-          style={{ fontFamily: "var(--lp-font-display)" }}
-        >
-          {brandName}
-        </p>
+        <div className="relative z-10 flex items-center gap-3">
+          <LogoTile size={36} />
+          <p
+            className="text-2xl font-semibold tracking-tight"
+            style={{ fontFamily: "var(--lp-font-display)" }}
+          >
+            {brandName}
+          </p>
+        </div>
         <div className="relative z-10">
           <p className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--lp-signal)]">
             {eyebrow}

@@ -2,14 +2,12 @@ package journeys
 
 import (
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 
 	"launchpad/internal/audit"
-	"launchpad/internal/organizations"
 	"launchpad/pkg/httpx"
 	"launchpad/pkg/security"
 )
@@ -45,7 +43,9 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 
 // HandleCreate creates a draft journey.
 func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
-	principal, ok := requireManager(w, r)
+	// Authorization is enforced by the route-level RequirePermission
+	// (journeys.create); the handler only needs the authenticated principal.
+	principal, ok := requirePrincipal(w, r)
 	if !ok {
 		return
 	}
@@ -71,11 +71,9 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.recordAudit(w, r, principal, "journey.created", "journey_template", template.ID, map[string]any{
+	h.recordAudit(r, principal, "journey.created", "journey_template", template.ID, map[string]any{
 		"name": template.Name,
-	}); err != nil {
-		return
-	}
+	})
 
 	writeJSON(w, r, http.StatusCreated, template)
 }
@@ -116,17 +114,23 @@ func (h *Handler) HandleListSteps(w http.ResponseWriter, r *http.Request) {
 
 // HandleAddStep adds a step to a draft journey.
 func (h *Handler) HandleAddStep(w http.ResponseWriter, r *http.Request) {
-	principal, ok := requireManager(w, r)
+	// Authorization: route-level RequirePermission (journeys.create).
+	principal, ok := requirePrincipal(w, r)
 	if !ok {
 		return
 	}
 
 	var body struct {
-		StepType      string         `json:"stepType"`
-		Title         string         `json:"title"`
-		Instructions  string         `json:"instructions"`
-		DueOffsetDays int            `json:"dueOffsetDays"`
-		Config        map[string]any `json:"config"`
+		StepType            string         `json:"stepType"`
+		Title               string         `json:"title"`
+		Instructions        string         `json:"instructions"`
+		DueOffsetDays       int            `json:"dueOffsetDays"`
+		BusinessDays        bool           `json:"businessDays"`
+		Stage               string         `json:"stage"`
+		ParallelGroup       string         `json:"parallelGroup"`
+		PrerequisiteStepIDs []string       `json:"prerequisiteStepIds"`
+		Locale              string         `json:"locale"`
+		Config              map[string]any `json:"config"`
 	}
 	if err := httpx.DecodeJSON(r, &body); err != nil {
 		writeError(w, r, http.StatusBadRequest, "INVALID_JSON", "Request body is invalid")
@@ -135,11 +139,16 @@ func (h *Handler) HandleAddStep(w http.ResponseWriter, r *http.Request) {
 	}
 
 	step, err := h.svc.AddStep(r.Context(), principal.OrganizationID, chi.URLParam(r, "journeyID"), AddStepInput{
-		StepType:      body.StepType,
-		Title:         body.Title,
-		Instructions:  body.Instructions,
-		DueOffsetDays: body.DueOffsetDays,
-		Config:        body.Config,
+		StepType:            body.StepType,
+		Title:               body.Title,
+		Instructions:        body.Instructions,
+		DueOffsetDays:       body.DueOffsetDays,
+		BusinessDays:        body.BusinessDays,
+		Stage:               body.Stage,
+		ParallelGroup:       body.ParallelGroup,
+		PrerequisiteStepIDs: body.PrerequisiteStepIDs,
+		Locale:              body.Locale,
+		Config:              body.Config,
 	})
 	if err != nil {
 		writeJourneyError(w, r, err)
@@ -147,19 +156,18 @@ func (h *Handler) HandleAddStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.recordAudit(w, r, principal, "journey.step_added", "journey_step", step.ID, map[string]any{
+	h.recordAudit(r, principal, "journey.step_added", "journey_step", step.ID, map[string]any{
 		"title":    step.Title,
 		"stepType": step.StepType,
-	}); err != nil {
-		return
-	}
+	})
 
 	writeJSON(w, r, http.StatusCreated, step)
 }
 
 // HandlePublish publishes a draft journey.
 func (h *Handler) HandlePublish(w http.ResponseWriter, r *http.Request) {
-	principal, ok := requireManager(w, r)
+	// Authorization: route-level RequirePermission (journeys.publish).
+	principal, ok := requirePrincipal(w, r)
 	if !ok {
 		return
 	}
@@ -171,20 +179,138 @@ func (h *Handler) HandlePublish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.recordAudit(w, r, principal, "journey.published", "journey_template", template.ID, nil); err != nil {
-		return
-	}
+	h.recordAudit(r, principal, "journey.published", "journey_template", template.ID, nil)
 
 	writeJSON(w, r, http.StatusOK, template)
 }
 
+// HandleDeleteStep removes a step from a draft journey.
+func (h *Handler) HandleDeleteStep(w http.ResponseWriter, r *http.Request) {
+	// Authorization: route-level RequirePermission (journeys.create).
+	principal, ok := requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+
+	journeyID := chi.URLParam(r, "journeyID")
+	stepID := chi.URLParam(r, "stepID")
+
+	if err := h.svc.DeleteStep(r.Context(), principal.OrganizationID, journeyID, stepID); err != nil {
+		writeJourneyError(w, r, err)
+
+		return
+	}
+
+	h.recordAudit(r, principal, "journey.step_deleted", "journey_step", stepID, map[string]any{
+		"journeyTemplateId": journeyID,
+	})
+
+	writeJSON(w, r, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+// HandleCreateVersion starts a new draft version of a published journey.
+func (h *Handler) HandleCreateVersion(w http.ResponseWriter, r *http.Request) {
+	// Authorization: route-level RequirePermission (journeys.create).
+	principal, ok := requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+
+	template, err := h.svc.CreateNewVersion(r.Context(), principal.OrganizationID, chi.URLParam(r, "journeyID"))
+	if err != nil {
+		writeJourneyError(w, r, err)
+
+		return
+	}
+
+	h.recordAudit(r, principal, "journey.version_created", "journey_template", template.ID, map[string]any{
+		"version": template.CurrentVersion,
+	})
+
+	writeJSON(w, r, http.StatusCreated, template)
+}
+
+// HandleListVersions lists version history for a journey.
+func (h *Handler) HandleListVersions(w http.ResponseWriter, r *http.Request) {
+	principal, ok := requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+
+	versions, err := h.svc.ListVersions(r.Context(), principal.OrganizationID, chi.URLParam(r, "journeyID"))
+	if err != nil {
+		writeJourneyError(w, r, err)
+
+		return
+	}
+
+	writeJSON(w, r, http.StatusOK, versions)
+}
+
+// HandleClone creates a new draft journey template with the same steps.
+func (h *Handler) HandleClone(w http.ResponseWriter, r *http.Request) {
+	// Authorization: route-level RequirePermission (journeys.create).
+	principal, ok := requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+
+	sourceID := chi.URLParam(r, "journeyID")
+
+	clone, err := h.svc.CloneTemplate(r.Context(), principal.OrganizationID, sourceID, principal.UserID)
+	if err != nil {
+		writeJourneyError(w, r, err)
+
+		return
+	}
+
+	h.recordAudit(r, principal, "journey.cloned", "journey_template", clone.ID, map[string]any{
+		"sourceTemplateId": sourceID,
+	})
+
+	writeJSON(w, r, http.StatusCreated, clone)
+}
+
+// HandleRollback publishes an older version of a journey as current.
+func (h *Handler) HandleRollback(w http.ResponseWriter, r *http.Request) {
+	// Authorization: route-level RequirePermission (journeys.publish).
+	principal, ok := requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+
+	var body struct {
+		Version int `json:"version"`
+	}
+	if err := httpx.DecodeJSON(r, &body); err != nil {
+		writeError(w, r, http.StatusBadRequest, "INVALID_JSON", "Request body is invalid")
+
+		return
+	}
+
+	template, err := h.svc.Rollback(r.Context(), principal.OrganizationID, chi.URLParam(r, "journeyID"), body.Version)
+	if err != nil {
+		writeJourneyError(w, r, err)
+
+		return
+	}
+
+	h.recordAudit(r, principal, "journey.rolled_back", "journey_template", template.ID, map[string]any{
+		"version": body.Version,
+	})
+
+	writeJSON(w, r, http.StatusOK, template)
+}
+
+// recordAudit writes a tenant-scoped audit event for a journey action. The
+// state change is already committed, so a failed audit write is logged but
+// never fails the request.
 func (h *Handler) recordAudit(
-	w http.ResponseWriter,
 	r *http.Request,
 	principal security.Principal,
 	action, resourceType, resourceID string,
 	metadata map[string]any,
-) error {
+) {
 	orgID := principal.OrganizationID
 	if err := h.audit.Record(
 		r.Context(),
@@ -196,12 +322,7 @@ func (h *Handler) recordAudit(
 		metadata,
 	); err != nil {
 		slog.ErrorContext(r.Context(), "audit journey action failed", "error", err, "action", action)
-		writeError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Unable to record audit event")
-
-		return fmt.Errorf("record audit event: %w", err)
 	}
-
-	return nil
 }
 
 func requirePrincipal(w http.ResponseWriter, r *http.Request) (security.Principal, bool) {
@@ -215,28 +336,14 @@ func requirePrincipal(w http.ResponseWriter, r *http.Request) (security.Principa
 	return principal, true
 }
 
-func requireManager(w http.ResponseWriter, r *http.Request) (security.Principal, bool) {
-	principal, ok := requirePrincipal(w, r)
-	if !ok {
-		return security.Principal{}, false
-	}
-
-	if !organizations.CanManageOrganization(principal.RoleCode) {
-		writeError(w, r, http.StatusForbidden, "FORBIDDEN", "Insufficient permissions")
-
-		return security.Principal{}, false
-	}
-
-	return principal, true
-}
-
 func writeJourneyError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, ErrInvalidInput):
 		writeError(w, r, http.StatusBadRequest, "INVALID_INPUT", err.Error())
 	case errors.Is(err, ErrNotFound), errors.Is(err, ErrStepNotFound):
 		writeError(w, r, http.StatusNotFound, "NOT_FOUND", err.Error())
-	case errors.Is(err, ErrNotDraft), errors.Is(err, ErrNotPublished), errors.Is(err, ErrNoSteps):
+	case errors.Is(err, ErrNotDraft), errors.Is(err, ErrNotPublished), errors.Is(err, ErrNoSteps),
+		errors.Is(err, ErrStepPositionTaken):
 		writeError(w, r, http.StatusConflict, "INVALID_STATE", err.Error())
 	default:
 		slog.ErrorContext(r.Context(), "journey handler error", "error", err)

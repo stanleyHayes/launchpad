@@ -97,6 +97,10 @@ linters:
       exclude:
         - '^github\.com/golang-jwt/jwt/v5\.RegisteredClaims$'
         - '^net/http\.Server$'
+        - '^net/http\.Client$'
+        - '^net/http\.Cookie$'
+        - '^net/http\.Transport$'
+        - '^net\.Dialer$'
         - '^log/slog\.HandlerOptions$'
         - '^go\.mongodb\.org/mongo-driver/mongo\.IndexModel$'
         - '^go\.mongodb\.org/mongo-driver/mongo/options\..*$'
@@ -107,7 +111,9 @@ linters:
         - '^launchpad/pkg/httpx\.Envelope$'
         - '^launchpad/pkg/config\.Config$'
         - '^launchpad/internal/auth\.User$'
+        - '^launchpad/internal/auth\.Result$'
         - '^launchpad/internal/audit\.Event$'
+        - '^launchpad/internal/organizations\.Organization$'
         - '^launchpad/internal/employees\.Employee$'
         - '^launchpad/internal/journeys\.Template$'
         - '^launchpad/internal/journeys\.Step$'
@@ -122,8 +128,31 @@ linters:
         - '^launchpad/internal/featureflags\.Override$'
         - '^launchpad/internal/billing\.Plan$'
         - '^launchpad/internal/billing\.Subscription$'
+        - '^launchpad/internal/billing\.Invoice$'
+        - '^launchpad/internal/billing\.PlanRevenue$'
+        - '^launchpad/internal/billing\.RevenueSummary$'
+        - '^launchpad/internal/billing\.WebhookOutcome$'
+        - '^launchpad/internal/billing\.InitializeTransactionInput$'
+        - '^launchpad/internal/billing\.CheckoutSession$'
+        - '^launchpad/internal/billing\.VerifiedPayment$'
         - '^launchpad/internal/support\.Ticket$'
+        - '^launchpad/internal/supportsessions\.Session$'
         - '^launchpad/internal/cms\.Page$'
+        - '^launchpad/internal/knowledge\.Document$'
+        - '^launchpad/internal/assistant\.Answer$'
+        - '^launchpad/internal/assistant\.GeneratedAnswer$'
+        - '^launchpad/internal/notifications\.ChannelConfig$'
+        - '^launchpad/internal/sso\.Config$'
+        - '^launchpad/internal/hris\.Config$'
+        - '^launchpad/internal/integrations\.Connection$'
+        - '^launchpad/internal/integrations\.ConnectionResponse$'
+        - '^launchpad/internal/integrations\.ConnectInput$'
+        - '^launchpad/internal/integrations\.ProviderInfo$'
+        - '^launchpad/internal/scim\.User$'
+        - '^launchpad/internal/scim\.Name$'
+        - '^launchpad/internal/scim\.ListResponse$'
+        - '^launchpad/internal/scim\.ErrorResponse$'
+        - '^launchpad/internal/scim\.GroupPatchChange$'
         - '^launchpad/internal/analytics\.OnboardingSummary$'
         - '^launchpad/pkg/security\.Claims$'
         - '^launchpad/pkg/security\.Principal$'
@@ -151,6 +180,10 @@ linters:
           - maintidx
           - dupl
           - exhaustruct
+          - gosec
+          - goconst
+          - err113
+          - ireturn
       - path: apps/api/cmd/api/main\.go
         linters:
           - nonamedreturns

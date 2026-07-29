@@ -1,14 +1,11 @@
 "use client";
 
 import { createLaunchPadClient } from "@launchpad/api-client";
-import { getAccessToken } from "@/lib/session";
+import { apiBaseUrl } from "./env";
 
-const apiBaseUrl =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
+// Singleton so the client's single-flight token refresh is shared app-wide.
+const client = createLaunchPadClient({ baseUrl: apiBaseUrl });
 
 export function getClient() {
-  return createLaunchPadClient({
-    baseUrl: apiBaseUrl,
-    getAccessToken,
-  });
+  return client;
 }

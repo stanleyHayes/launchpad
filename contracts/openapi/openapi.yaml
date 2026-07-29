@@ -19,13 +19,71 @@ paths:
           description: Created
   /auth/login:
     post:
-      summary: Login
+      summary: >-
+        Login. When the account has MFA enabled the response is
+        `{mfaRequired: true, mfaTicket}` instead of tokens; complete the login
+        via /auth/login/mfa.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: OK
+  /auth/login/mfa:
+    post:
+      summary: Complete an MFA-challenged login with the ticket and a TOTP or backup code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MFALoginRequest"
+      responses:
+        "200":
+          description: OK
+  /auth/mfa/enroll:
+    post:
+      summary: >-
+        Start TOTP enrollment for the authenticated user. Returns the shared
+        secret, otpauth URL, and one-time backup codes (shown once, stored
+        hashed).
+      security:
+        - bearerAuth: []
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MFAEnrollResult"
+  /auth/mfa/confirm:
+    post:
+      summary: Confirm TOTP enrollment with a code from the authenticator app
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MFACodeRequest"
+      responses:
+        "200":
+          description: OK
+  /auth/mfa/disable:
+    post:
+      summary: Disable MFA; requires a valid TOTP or backup code
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MFACodeRequest"
       responses:
         "200":
           description: OK
@@ -51,6 +109,33 @@ paths:
       responses:
         "200":
           description: OK
+  /auth/organizations:
+    get:
+      summary: List active organization memberships available to the current user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Organization choices with effective role codes
+  /auth/switch-organization:
+    post:
+      summary: Rotate the current session into another active organization membership
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [organizationId]
+              properties:
+                organizationId: { type: string }
+      responses:
+        "200":
+          description: New session and selected organization
+        "401":
+          description: Membership or organization unavailable
   /leads:
     post:
       summary: Capture a public marketing lead
@@ -78,6 +163,30 @@ paths:
   /analytics/onboarding:
     get:
       summary: Organization onboarding analytics summary
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+  /analytics/onboarding/breakdown:
+    get:
+      summary: Onboarding completion rates grouped by department or job role
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: by
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [department, jobRole]
+            default: department
+      responses:
+        "200":
+          description: OK
+  /analytics/assistant:
+    get:
+      summary: Assistant question volume, refusal rate, and helpfulness report
       security:
         - bearerAuth: []
       responses:
@@ -159,11 +268,116 @@ paths:
       responses:
         "200":
           description: OK
-  /platform/organizations:
+  /platform/staff:
     get:
-      summary: List all organizations
+      summary: List platform staff accounts
       security:
         - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+    post:
+      summary: Create a platform staff account (role + temp password shown once, or invite email when configured)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - displayName
+                - roleCode
+              properties:
+                email:
+                  type: string
+                displayName:
+                  type: string
+                roleCode:
+                  type: string
+                  enum:
+                    - platform_owner
+                    - platform_admin
+                    - support_agent
+                    - billing_admin
+                    - content_editor
+                    - security_admin
+                    - analyst
+                    - read_only_auditor
+      responses:
+        "201":
+          description: Created
+  /platform/staff/{staffID}:
+    patch:
+      summary: Change a platform staff member's role
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: staffID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - roleCode
+              properties:
+                roleCode:
+                  type: string
+      responses:
+        "200":
+          description: OK
+  /platform/staff/{staffID}/deactivate:
+    post:
+      summary: Deactivate a platform staff account (blocks login)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: staffID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+  /platform/staff/{staffID}/reactivate:
+    post:
+      summary: Reactivate a platform staff account
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: staffID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+  /platform/organizations:
+    get:
+      summary: Search and filter organizations
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+          description: Case-insensitive name or slug substring
+        - name: status
+          in: query
+          schema: { type: string, enum: [trial, active, suspended, closed] }
+        - name: planCode
+          in: query
+          schema: { type: string }
       responses:
         "200":
           description: OK
@@ -209,6 +423,51 @@ paths:
       responses:
         "200":
           description: OK
+  /platform/organizations/{organizationID}/close:
+    post:
+      summary: Close an organization while retaining its data for export or purge
+      description: Closing is terminal through ordinary lifecycle controls and blocks new logins and refreshes.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: organizationID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Organization closed
+        "404":
+          description: Organization not found
+  /platform/organizations/{organizationID}/purge:
+    post:
+      summary: Irreversibly purge all tenant data (GDPR); body confirm must equal the organization slug
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: organizationID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirm]
+              properties:
+                confirm:
+                  type: string
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Invalid JSON or confirmation mismatch
+        "404":
+          description: Organization not found
   /platform/leads:
     get:
       summary: List captured leads
@@ -232,6 +491,41 @@ paths:
       responses:
         "201":
           description: Created
+  /platform/marketplace/templates:
+    get:
+      summary: List all marketplace templates including pending submissions
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: OK }
+    post:
+      summary: Create an official marketplace template draft
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201": { description: Created }
+  /platform/marketplace/templates/{templateID}/publish:
+    post:
+      summary: Approve and publish a marketplace template
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Published }
+  /platform/marketplace/templates/{templateID}/remove:
+    post:
+      summary: Remove an unsafe or outdated marketplace template
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Removed }
+  /platform/marketplace/templates/{templateID}/version:
+    post:
+      summary: Replace the step snapshot as a new moderated version
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: New draft or submitted version }
+  /platform/marketplace/templates/{templateID}/featured:
+    put:
+      summary: Feature or unfeature a published marketplace template
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Updated }
   /platform/feature-flags/{key}:
     patch:
       summary: Update a global feature flag
@@ -246,6 +540,22 @@ paths:
       responses:
         "200":
           description: OK
+  /platform/feature-flags/{key}/history:
+    get:
+      summary: List newest-first rollout history for a feature flag
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        "200":
+          description: Rollout history including resulting flag snapshots
   /platform/organizations/{organizationID}/feature-flags/{key}:
     put:
       summary: Set organization feature flag override
@@ -302,6 +612,14 @@ paths:
       responses:
         "200":
           description: OK
+  /platform/billing/summary:
+    get:
+      summary: MRR/ARR and per-plan revenue from active subscriptions
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
   /platform/organizations/{organizationID}/subscription:
     post:
       summary: Set organization subscription
@@ -352,6 +670,82 @@ paths:
       responses:
         "200":
           description: OK
+  /platform/support-sessions:
+    post:
+      summary: Start an audited support impersonation session for an organization (platform staff only)
+      description: >-
+        Creates a support session and returns a short-lived impersonation token
+        (15-minute TTL) carrying read-only tenant permissions. The reason is
+        mandatory (min 10 characters), the session duration is capped at 2
+        hours, organization owners are notified in-app, and every action taken
+        with the token is audited with impersonation context.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [organizationId, reason]
+              properties:
+                organizationId:
+                  type: string
+                reason:
+                  type: string
+                  minLength: 10
+                durationMinutes:
+                  type: integer
+                  minimum: 1
+                  maximum: 120
+      responses:
+        "201":
+          description: Created; returns the session, the impersonation token, and its expiry
+        "400":
+          description: Invalid JSON, missing/short reason, or duration above the 2-hour cap
+        "404":
+          description: Organization not found
+    get:
+      summary: List support sessions (audit trail) for an organization (platform staff only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: organizationId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Missing organizationId
+  /platform/support-sessions/{sessionID}/end:
+    post:
+      summary: End a support session early; the impersonation token is invalidated immediately
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: sessionID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                endReason:
+                  type: string
+      responses:
+        "200":
+          description: OK
+        "404":
+          description: Support session not found
+        "409":
+          description: Support session already ended
   /feature-flags:
     get:
       summary: List resolved feature flags for current organization
@@ -360,6 +754,29 @@ paths:
       responses:
         "200":
           description: OK
+  /marketplace/templates:
+    get:
+      summary: List published marketplace templates
+      responses:
+        "200": { description: OK }
+  /marketplace/templates/submit:
+    post:
+      summary: Submit a customer-authored template for platform review
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201": { description: Submitted }
+  /marketplace/templates/{templateID}/install:
+    post:
+      summary: Install a published snapshot as an independent organization journey draft
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201": { description: Installation record and new journey id }
+  /marketplace/templates/{templateID}/rating:
+    put:
+      summary: Create or replace the caller's 1-5 rating
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Updated template rating summary }
   /billing/plans:
     get:
       summary: List active billing plans
@@ -371,6 +788,356 @@ paths:
   /billing/subscription:
     get:
       summary: Get current organization subscription
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+  /billing/invoices:
+    get:
+      summary: List current organization invoices
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+  /billing/invoices/{invoiceID}/pay:
+    post:
+      summary: Initialize hosted checkout for an open invoice
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: invoiceID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Checkout URL and payment reference
+        "404":
+          description: Invoice not found or payment provider not configured
+        "409":
+          description: Invoice is not open for payment
+  /webhooks/paystack:
+    post:
+      summary: >-
+        Paystack event receiver. Public route; authenticated by the
+        x-paystack-signature HMAC-SHA512 header and idempotent on the payment
+        reference. Only charge.success settles invoices.
+      security: []
+      responses:
+        "200":
+          description: Event acknowledged
+        "401":
+          description: Signature verification failed
+        "404":
+          description: Webhook secret not configured
+  /knowledge/documents:
+    get:
+      summary: List knowledge documents visible to the caller
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+    post:
+      summary: Create a draft knowledge document
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateKnowledgeDocumentRequest"
+      responses:
+        "201":
+          description: Created
+  /knowledge/documents/{documentID}:
+    get:
+      summary: Get one knowledge document
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: documentID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+    patch:
+      summary: Update editable fields of a draft knowledge document
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: documentID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateKnowledgeDocumentRequest"
+      responses:
+        "200":
+          description: OK
+  /knowledge/documents/{documentID}/approve:
+    post:
+      summary: Approve a draft document for AI indexing
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: documentID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+  /knowledge/documents/{documentID}/history:
+    get:
+      summary: List immutable knowledge document version snapshots
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: documentID
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+  /knowledge/documents/{documentID}/versions:
+    post:
+      summary: Reopen a published knowledge document as a new draft version
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: documentID
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+  /knowledge/documents/{documentID}/sync:
+    post:
+      summary: Synchronize connector content and return changed content to draft for approval
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: documentID
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+  /knowledge/documents/{documentID}/index:
+    post:
+      summary: Hand an approved document to the AI indexer
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: documentID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+  /knowledge/documents/{documentID}/archive:
+    post:
+      summary: Withdraw a document from the AI index
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: documentID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+  /assessments:
+    get:
+      summary: List assessments with answer keys (manager view)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+    post:
+      summary: Create a draft assessment
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAssessmentRequest"
+      responses:
+        "201":
+          description: Created
+  /assessments/{assessmentID}:
+    get:
+      summary: Get one assessment with answer keys (manager view)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: assessmentID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+    patch:
+      summary: Update editable fields of a draft assessment
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: assessmentID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAssessmentRequest"
+      responses:
+        "200":
+          description: OK
+  /assessments/{assessmentID}/publish:
+    post:
+      summary: Publish a draft assessment so employees can take it
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: assessmentID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+  /assessments/{assessmentID}/archive:
+    post:
+      summary: Archive an assessment
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: assessmentID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+  /assessments/{assessmentID}/take:
+    get:
+      summary: >-
+        Get the answer-key-free questions for the calling employee, shuffled
+        when the assessment randomizes, plus the remaining attempt budget
+        (attemptsRemaining is -1 when unlimited)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: assessmentID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+        "409":
+          description: Assessment is not published
+  /assessments/{assessmentID}/attempts:
+    get:
+      summary: List every attempt on an assessment (manager view)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: assessmentID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+    post:
+      summary: >-
+        Submit the calling employee's answers for server-side grading. Choice
+        questions grade on exact set match; short answers grade
+        case-insensitively and otherwise go to pending_review. A graded pass
+        issues a certificate.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: assessmentID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitAssessmentAttemptRequest"
+      responses:
+        "201":
+          description: Created
+        "409":
+          description: Attempt limit reached or assessment not published
+  /assessments/{assessmentID}/attempts/{attemptID}/review:
+    post:
+      summary: Finalize a pending-review attempt with the manager's score and note
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: assessmentID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: attemptID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewAssessmentAttemptRequest"
+      responses:
+        "200":
+          description: OK
+        "409":
+          description: Attempt is not pending review
+  /me/certificates:
+    get:
+      summary: List the calling employee's certificates
       security:
         - bearerAuth: []
       responses:
@@ -388,6 +1155,12 @@ paths:
       summary: Create support ticket
       security:
         - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSupportTicketRequest"
       responses:
         "201":
           description: Created
@@ -405,6 +1178,323 @@ paths:
       responses:
         "200":
           description: OK
+  /me/requests:
+    get:
+      summary: List the caller's own equipment/access requests
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+    post:
+      summary: Raise an equipment/access request (employee self-service)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRequestRequest"
+      responses:
+        "201":
+          description: Created
+  /me/requests/{requestID}/cancel:
+    post:
+      summary: Cancel one of the caller's own pending requests
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: requestID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+  /requests:
+    get:
+      summary: List equipment/access requests for the organization (employees.read)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, approved, fulfilled, rejected, cancelled]
+      responses:
+        "200":
+          description: OK
+  /requests/{requestID}/decide:
+    post:
+      summary: Approve or reject a pending request (approvals.decide)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: requestID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DecideRequestRequest"
+      responses:
+        "200":
+          description: OK
+  /requests/{requestID}/fulfill:
+    post:
+      summary: Mark an approved request as provisioned (approvals.decide)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: requestID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+  /me/meetings:
+    get:
+      summary: List the caller's own meetings, soonest first
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+  /me/meetings/{meetingID}/cancel:
+    post:
+      summary: Cancel one of the caller's own scheduled meetings
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: meetingID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+        "404":
+          description: Meeting not found
+        "409":
+          description: Meeting is not scheduled
+  /meetings:
+    get:
+      summary: >-
+        List meetings visible to the caller (employees.read). Managers see
+        their team's meetings; callers without an employee record see the
+        whole organization.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [scheduled, completed, cancelled, no_show]
+      responses:
+        "200":
+          description: OK
+    post:
+      summary: Schedule a meeting for an employee (meetings.manage)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMeetingRequest"
+      responses:
+        "201":
+          description: Created
+        "400":
+          description: Invalid type, start time, or duration
+  /meetings/{meetingID}/complete:
+    post:
+      summary: Record a scheduled meeting's outcome — held or no-show, with optional notes link (meetings.manage)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: meetingID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompleteMeetingRequest"
+      responses:
+        "200":
+          description: OK
+        "409":
+          description: Meeting is not scheduled
+  /meetings/{meetingID}/cancel:
+    post:
+      summary: Cancel a scheduled meeting (meetings.manage)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: meetingID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+        "409":
+          description: Meeting is not scheduled
+  /meetings/{meetingID}:
+    patch:
+      summary: Reschedule a scheduled meeting and its linked calendar event (meetings.manage)
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: meetingID, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RescheduleMeetingRequest"
+      responses:
+        "200": { description: Rescheduled }
+        "409": { description: Meeting is not scheduled }
+  /calendar/connection:
+    get:
+      summary: Get an organization's calendar connection (masked, no token)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: provider
+          in: query
+          schema: { type: string, enum: [google, microsoft], default: google }
+      responses:
+        "200":
+          description: OK
+        "404":
+          description: No calendar connection
+    put:
+      summary: >-
+        Connect a calendar with a manually supplied OAuth2 access token
+        (integrations.manage). The token is validated against the provider
+        before anything is stored, encrypted at rest, and never returned.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConnectCalendarRequest"
+      responses:
+        "200":
+          description: Connected
+        "400":
+          description: Token rejected by the provider
+    delete:
+      summary: Disconnect a calendar provider (integrations.manage)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: provider
+          in: query
+          schema: { type: string, enum: [google, microsoft], default: google }
+      responses:
+        "204":
+          description: Disconnected
+  /calendar/oauth/{provider}/start:
+    get:
+      summary: Start a Google or Microsoft Calendar OAuth authorization-code flow
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: { type: string, enum: [google, microsoft] }
+      responses:
+        "200":
+          description: Provider authorization URL
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [authorizationUrl]
+                properties:
+                  authorizationUrl: { type: string, format: uri }
+  /calendar/oauth/callback:
+    get:
+      summary: Complete a calendar OAuth flow using one-time server-side state
+      parameters:
+        - { name: state, in: query, required: true, schema: { type: string } }
+        - { name: code, in: query, required: true, schema: { type: string } }
+      responses:
+        "302":
+          description: Redirect to the organization integrations page
+  /auth/saml/{orgSlug}/start:
+    get:
+      summary: Start tenant SAML 2.0 sign-in
+      parameters:
+        - { name: orgSlug, in: path, required: true, schema: { type: string } }
+      responses:
+        "302":
+          description: Redirect to the configured identity provider
+  /auth/saml/{orgSlug}/metadata:
+    get:
+      summary: Download tenant service-provider metadata
+      parameters:
+        - { name: orgSlug, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: SAML service-provider metadata
+          content:
+            application/samlmetadata+xml:
+              schema: { type: string }
+  /auth/saml/{orgSlug}/acs:
+    post:
+      summary: Validate a signed SAML response and issue a LaunchPad session
+      parameters:
+        - { name: orgSlug, in: path, required: true, schema: { type: string } }
+      responses:
+        "302":
+          description: Authenticated; redirect to organization portal
+  /organizations/current/saml:
+    get:
+      summary: Get tenant SAML configuration (integrations.manage)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: SAML configuration without identity-provider metadata
+    put:
+      summary: Configure tenant SAML identity-provider metadata and email mapping
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetSAMLConfigRequest"
+      responses:
+        "200":
+          description: Configuration saved
   /organizations/current/members:
     post:
       summary: Invite an HR admin member
@@ -427,8 +1517,34 @@ paths:
       responses:
         "200":
           description: OK
+  /organizations/current/setup:
+    patch:
+      summary: Persist organization setup wizard progress
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [step]
+              properties:
+                step: { type: integer, minimum: 1, maximum: 10 }
+                completed: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Updated organization with durable setup progress
     patch:
       summary: Update current organization
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+  /organizations/current/export:
+    get:
+      summary: Export all organization data (GDPR, requires data.export)
       security:
         - bearerAuth: []
       responses:
@@ -493,6 +1609,23 @@ paths:
       responses:
         "201":
           description: Created
+  /employees/import:
+    post:
+      summary: Bulk import up to 1,000 employees from CSV (employees.create)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          text/csv:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "200":
+          description: Every row imported
+        "207":
+          description: Import completed with row-level errors
   /employees/{employeeID}:
     get:
       summary: Get employee by id
@@ -591,6 +1724,114 @@ paths:
       responses:
         "200":
           description: OK
+  /journeys/{journeyID}/versions:
+    get:
+      summary: List journey version history
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: journeyID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/JourneyVersionSummary" }
+    post:
+      summary: Start a new draft version of a published journey
+      description: >-
+        Copies the published steps into a new draft at currentVersion + 1.
+        The published version's steps are left untouched, so assignments
+        pinned to older versions keep working.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: journeyID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "201":
+          description: Created
+        "409":
+          description: Journey is not published
+  /journeys/{journeyID}/clone:
+    post:
+      summary: Clone a journey template into a new draft
+      description: >-
+        Creates a new draft template named "<name> (copy)" with the same
+        steps as the source template's current version.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: journeyID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "201":
+          description: Created
+  /journeys/{journeyID}/rollback:
+    post:
+      summary: Publish an older journey version as current
+      description: >-
+        Copies the target version's steps into a new published version, so
+        every historical version keeps its steps and assignments pinned to
+        older templateVersions keep working. Rolling back to the current
+        version is a no-op.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: journeyID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RollbackJourneyRequest"
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Invalid target version
+        "409":
+          description: Journey is not published
+  /journeys/{journeyID}/steps/{stepID}:
+    delete:
+      summary: Delete a step from a draft journey
+      description: Remaining draft steps are renumbered to a contiguous 1..N sequence.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: journeyID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: stepID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+        "404":
+          description: Step not found
+        "409":
+          description: Journey is not a draft
   /assignments:
     get:
       summary: List journey assignments
@@ -631,9 +1872,88 @@ paths:
           required: true
           schema:
             type: string
+        - name: locale
+          in: query
+          required: false
+          schema: { type: string }
+          description: Preferred BCP 47 locale for translated step copy.
       responses:
         "200":
           description: OK
+  /assignment-rules:
+    get:
+      summary: List assignment rules (requires journeys.assign)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+    post:
+      summary: >-
+        Create an assignment rule for a published journey template. Rules
+        start active; empty departmentId/jobRoleId match every employee.
+        (requires journeys.assign)
+      security:
+        - bearerAuth: []
+      responses:
+        "201":
+          description: Created
+        "400":
+          description: Invalid input or journey not published
+  /assignment-rules/{ruleID}:
+    patch:
+      summary: Update an assignment rule (requires journeys.assign)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: ruleID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+        "404":
+          description: Rule not found
+    delete:
+      summary: >-
+        Delete an assignment rule. Existing assignments are left untouched.
+        (requires journeys.assign)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: ruleID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+        "404":
+          description: Rule not found
+  /assignment-rules/{ruleID}/run:
+    post:
+      summary: >-
+        Apply a rule to every matching active employee, skipping those
+        already assigned. Returns {employees, assigned, skipped}.
+        (requires journeys.assign)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: ruleID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+        "404":
+          description: Rule not found
+        "409":
+          description: Rule is inactive
   /me/assignments:
     get:
       summary: List assignments for current employee
@@ -656,6 +1976,108 @@ paths:
       responses:
         "200":
           description: OK
+  /step-assignments/{stepAssignmentID}/start:
+    post:
+      summary: >-
+        Mark a step assignment started by its owner. A pending step moves to
+        in_progress and startedAt is recorded once; starting an already
+        started step is a no-op. Only the step's employee may start it.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: stepAssignmentID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/StepAssignment" }
+        "404":
+          description: Step assignment not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "409":
+          description: Invalid state transition (completed or awaiting approval)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+  /step-assignments/{stepAssignmentID}/override:
+    post:
+      summary: Complete, skip, or reopen a step with a mandatory manager reason
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: stepAssignmentID
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, reason]
+              properties:
+                action: { type: string, enum: [complete, skip, reopen] }
+                reason: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: OK
+  /step-assignments/{stepAssignmentID}/submit:
+    post:
+      summary: >-
+        Store partial progress on a step assignment without completing it
+        (draft saves for document/task steps). Quiz steps are excluded —
+        they are only submitted through /complete so grading stays
+        server-side. Submitting implies the step is started. Only the step's
+        employee may submit it.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: stepAssignmentID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitStepRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/StepAssignment" }
+        "400":
+          description: Submission missing
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "404":
+          description: Step assignment not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "409":
+          description: Invalid state (quiz step, or step not in progress)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
   /approvals:
     get:
       summary: List approvals
@@ -686,6 +2108,14 @@ paths:
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Notification" }
   /notifications/{id}/read:
     post:
       summary: Mark notification as read
@@ -700,6 +2130,12 @@ paths:
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Notification" }
 components:
   securitySchemes:
     bearerAuth:
@@ -724,6 +2160,37 @@ components:
         email: { type: string, format: email }
         password: { type: string }
         organizationId: { type: string }
+    MFALoginRequest:
+      type: object
+      required: [ticket, code]
+      properties:
+        ticket:
+          type: string
+          description: Single-use, 5-minute ticket returned by an mfaRequired login.
+        code:
+          type: string
+          description: 6-digit TOTP code or a single-use backup code.
+    MFACodeRequest:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          description: 6-digit TOTP code; disable also accepts a backup code.
+    MFAEnrollResult:
+      type: object
+      required: [secret, otpauthUrl, backupCodes]
+      properties:
+        secret:
+          type: string
+          description: Base32-encoded TOTP shared secret (shown once).
+        otpauthUrl:
+          type: string
+          description: otpauth:// provisioning URI for authenticator apps.
+        backupCodes:
+          type: array
+          description: One-time recovery codes (shown once, stored hashed).
+          items: { type: string }
     CreateEmployeeRequest:
       type: object
       required: [firstName, lastName, workEmail, startDate]
@@ -745,6 +2212,114 @@ components:
         company: { type: string }
         message: { type: string }
         source: { type: string }
+    CreateSupportTicketRequest:
+      type: object
+      required: [subject, body]
+      properties:
+        subject: { type: string }
+        body: { type: string }
+        priority:
+          type: string
+          enum: [low, normal, high, urgent]
+          default: normal
+        category:
+          type: string
+          enum: [hr, it, manager, other]
+          description: Optional classification reusing the blocker taxonomy.
+    CreateRequestRequest:
+      type: object
+      required: [kind, item]
+      properties:
+        kind:
+          type: string
+          enum: [equipment, access]
+        item:
+          type: string
+          enum: [laptop, mobile, badge, desk_equipment, vpn, email, software, github_repo, jira_project, other]
+        details: { type: string }
+    DecideRequestRequest:
+      type: object
+      required: [approve]
+      properties:
+        approve: { type: boolean }
+        note: { type: string }
+    CreateMeetingRequest:
+      type: object
+      required: [title, type, attendeeEmployeeId, startsAt]
+      properties:
+        title: { type: string }
+        type:
+          type: string
+          enum: [manager_intro, hr_orientation, team_intro, buddy_checkin, architecture_walkthrough, role_coaching, first_week_review]
+        attendeeEmployeeId: { type: string }
+        startsAt: { type: string, format: date-time }
+        durationMin: { type: integer, minimum: 5, maximum: 480, default: 30 }
+        location: { type: string, description: Meeting URL or free-text location }
+        notesLink: { type: string }
+    CompleteMeetingRequest:
+      type: object
+      properties:
+        noShow: { type: boolean, default: false }
+        notesLink: { type: string }
+    RescheduleMeetingRequest:
+      type: object
+      required: [startsAt, durationMin]
+      properties:
+        startsAt: { type: string, format: date-time }
+        durationMin: { type: integer, minimum: 5, maximum: 480 }
+        location: { type: string }
+    ConnectCalendarRequest:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string, description: Provider OAuth2 access token }
+        provider: { type: string, enum: [google, microsoft], default: google }
+    SetSAMLConfigRequest:
+      type: object
+      required: [enabled]
+      properties:
+        enabled: { type: boolean }
+        idpMetadataXml:
+          type: string
+          description: Identity-provider metadata XML; may be omitted to retain existing metadata.
+        emailAttribute: { type: string, default: email }
+    CreateKnowledgeDocumentRequest:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string }
+        source:
+          type: string
+          enum: [manual, upload, url, notion, confluence, google_drive, github, sharepoint, wiki]
+          default: manual
+        uri: { type: string }
+        body: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        accessScope:
+          type: string
+          enum: [organization, restricted]
+          default: organization
+        ownerUserId: { type: string }
+        reviewDate: { type: string, format: date-time }
+        retentionDays: { type: integer, minimum: 0 }
+    UpdateKnowledgeDocumentRequest:
+      type: object
+      description: Draft documents only; nil fields are unchanged.
+      properties:
+        title: { type: string }
+        uri: { type: string }
+        body: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        accessScope:
+          type: string
+          enum: [organization, restricted]
+        ownerUserId: { type: string }
+        reviewDate: { type: string, format: date-time }
+        retentionDays: { type: integer, minimum: 0 }
     InviteMemberRequest:
       type: object
       required: [email, displayName, password, roleCode]
@@ -767,3 +2342,195 @@ components:
         title: { type: string }
         summary: { type: string }
         body: { type: string }
+    JourneyVersionSummary:
+      type: object
+      required: [version, status, stepCount]
+      properties:
+        version: { type: integer, minimum: 1 }
+        status:
+          type: string
+          enum: [draft, published, archived]
+        stepCount: { type: integer, minimum: 0 }
+    RollbackJourneyRequest:
+      type: object
+      required: [version]
+      properties:
+        version: { type: integer, minimum: 1 }
+    StepAssignment:
+      type: object
+      properties:
+        id: { type: string }
+        organizationId: { type: string }
+        journeyAssignmentId: { type: string }
+        journeyStepId: { type: string }
+        employeeId: { type: string }
+        stepType:
+          type: string
+          enum: [document, quiz, task, approval, equipment_request, access_request]
+        title: { type: string }
+        instructions: { type: string }
+        position: { type: integer }
+        stage: { type: string }
+        parallelGroup: { type: string }
+        prerequisiteStepIds:
+          type: array
+          items: { type: string }
+        locale: { type: string }
+        status:
+          type: string
+          enum: [pending, in_progress, awaiting_approval, completed, skipped, blocked]
+        dueAt: { type: string, format: date-time }
+        startedAt:
+          type: string
+          format: date-time
+          description: Set when the owner first starts (or submits) the step.
+        submission: { type: object }
+        score: { type: number }
+        attemptCount: { type: integer, minimum: 0 }
+        maxAttempts: { type: integer, minimum: 0 }
+        escalatedAt: { type: string, format: date-time }
+        overrideAction: { type: string, enum: [complete, skip, reopen] }
+        overrideReason: { type: string }
+        overrideByUserId: { type: string }
+        overriddenAt: { type: string, format: date-time }
+        quizQuestions:
+          type: array
+          description: >-
+            Answer-key-free snapshot of the quiz questions, frozen at assign
+            time. Present on quiz steps only.
+          items: { $ref: "#/components/schemas/QuizQuestionView" }
+        completedAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+    SubmitStepRequest:
+      type: object
+      required: [submission]
+      properties:
+        submission:
+          type: object
+          description: >-
+            Partial-progress payload stored on the step without completing
+            it (draft saves for document/task steps).
+    Notification:
+      type: object
+      properties:
+        id: { type: string }
+        organizationId: { type: string }
+        userId: { type: string }
+        type:
+          type: string
+          enum: [assignment, approval, due_soon, overdue, journey_completed, blocker, system]
+        title: { type: string }
+        body: { type: string }
+        link:
+          type: string
+          description: >-
+            App-relative deep path (e.g. /assignments/{id}) the client
+            navigates to when the notification is opened. Absent when the
+            notification has no target.
+        readAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+    ErrorEnvelope:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+    QuizQuestionView:
+      type: object
+      description: A quiz question without its answer key (employee-safe view).
+      properties:
+        id: { type: string }
+        text: { type: string }
+        options:
+          type: array
+          items: { type: string }
+    AssessmentQuestion:
+      type: object
+      required: [type, text]
+      properties:
+        id:
+          type: string
+          description: Server-assigned (q1..qN) when omitted
+        type:
+          type: string
+          enum: [single_choice, multiple_choice, true_false, short_answer]
+        text: { type: string }
+        options:
+          type: array
+          items: { type: string }
+          description: Choice options; true_false defaults to ["True", "False"]
+        correctOptions:
+          type: array
+          items: { type: integer }
+          description: Correct option indexes (exactly one for single_choice/true_false)
+        acceptedAnswers:
+          type: array
+          items: { type: string }
+          description: Short-answer accepted answers (case-insensitive exact match)
+        points:
+          type: integer
+          default: 1
+    AssessmentAnswer:
+      type: object
+      required: [questionId]
+      properties:
+        questionId: { type: string }
+        options:
+          type: array
+          items: { type: integer }
+          description: Selected option indexes for choice questions
+        text:
+          type: string
+          description: Free text for short_answer questions
+    CreateAssessmentRequest:
+      type: object
+      required: [title, questions, passingScore]
+      properties:
+        title: { type: string }
+        description: { type: string }
+        questions:
+          type: array
+          items:
+            $ref: "#/components/schemas/AssessmentQuestion"
+        passingScore:
+          type: number
+          description: Minimum percent score to pass (0-100)
+        maxAttempts:
+          type: integer
+          default: 0
+          description: Attempts allowed per employee; 0 means unlimited
+        randomize:
+          type: boolean
+          default: false
+          description: Shuffle question order per attempt
+    UpdateAssessmentRequest:
+      type: object
+      description: Draft assessments only; nil fields are unchanged.
+      properties:
+        title: { type: string }
+        description: { type: string }
+        questions:
+          type: array
+          items:
+            $ref: "#/components/schemas/AssessmentQuestion"
+        passingScore: { type: number }
+        maxAttempts: { type: integer }
+        randomize: { type: boolean }
+    SubmitAssessmentAttemptRequest:
+      type: object
+      required: [answers]
+      properties:
+        answers:
+          type: array
+          items:
+            $ref: "#/components/schemas/AssessmentAnswer"
+    ReviewAssessmentAttemptRequest:
+      type: object
+      required: [score]
+      properties:
+        score:
+          type: number
+          description: Final percent score (0-100); pass derives from the assessment's passingScore
+        note: { type: string }

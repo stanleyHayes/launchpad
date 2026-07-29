@@ -199,3 +199,22 @@ func joinCursorErrors(label string, decodeErr, closeErr error) error {
 
 	return nil
 }
+
+// DeleteForOrganization removes every department and job role of the
+// organization and returns the number of documents deleted. It serves only
+// the platform GDPR tenant purge (PRD 7.4).
+func (s *Store) DeleteForOrganization(ctx context.Context, organizationID string) (int64, error) {
+	res, err := s.departments.DeleteMany(ctx, bson.M{fieldOrganizationID: organizationID})
+	if err != nil {
+		return 0, fmt.Errorf("delete departments for organization: %w", err)
+	}
+
+	deleted := res.DeletedCount
+
+	res, err = s.jobRoles.DeleteMany(ctx, bson.M{fieldOrganizationID: organizationID})
+	if err != nil {
+		return 0, fmt.Errorf("delete job roles for organization: %w", err)
+	}
+
+	return deleted + res.DeletedCount, nil
+}

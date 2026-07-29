@@ -1,23 +1,230 @@
+/*
+ * LaunchPad design tokens.
+ *
+ * Default palette: "Navy + White" — deep navy + azure, chosen to read as
+ * professional and trustworthy for HR/IT buyers while staying brand-neutral so
+ * a tenant's own colors don't clash with it.
+ *
+ * Two layers:
+ *   1. BRAND layer (--lp-brand*, --lp-signal) — overridable per organization.
+ *      A tenant portal applies its stored brand colors to a wrapping element
+ *      via `brandCssVars(org.branding)`, overriding these defaults for its
+ *      subtree only.
+ *   2. FIXED layer (neutrals + semantics) — never tenant-overridable, so text
+ *      contrast and success/warning/danger meanings stay consistent and
+ *      accessible across every tenant.
+ *
+ * Gradients and focus rings derive from --lp-brand via color-mix, so an org's
+ * override propagates automatically without touching this file.
+ *
+ * Typography is a single family — Outfit — loaded per app via next/font, which
+ * publishes it as the `--lp-font` variable on <body>. The display/body tokens
+ * below point at that variable (falling back to a bare "Outfit" family name).
+ */
 :root {
-  --lp-ink: #0f1c2e;
-  --lp-ink-muted: #4a5a6f;
-  --lp-paper: #f3f6fa;
-  --lp-paper-elevated: #ffffff;
-  --lp-accent: #0e7c66;
-  --lp-accent-hover: #0a6352;
-  --lp-signal: #c99212;
-  --lp-border: #d5dee8;
+  /* Brand layer — overridable per organization */
+  --lp-brand: #16386e;
+  --lp-brand-strong: #0f1e3a;
+  --lp-brand-soft: #eaf1fb;
+  --lp-brand-contrast: #ffffff;
+  --lp-signal: #2e5bb0;
+
+  /* Accent aliases — legacy token names used by Button and marketing pages */
+  --lp-accent: var(--lp-brand);
+  --lp-accent-hover: var(--lp-brand-strong);
+  --lp-cta-gradient: linear-gradient(135deg, #16386e 0%, #2e5bb0 100%);
+
+  /* Fixed neutrals */
+  --lp-ink: #0f1e3a;
+  --lp-ink-muted: #5a6b85;
+  --lp-paper: #e6eaf1;
+  --lp-paper-elevated: #e6eaf1;
+  --lp-border: #d3dae7;
+  --lp-sidebar: #0b1b33;
+  --lp-sidebar-muted: #7d8da3;
+
+  /* Fixed semantics */
   --lp-danger: #b42318;
   --lp-warning: #b54708;
   --lp-success: #027a48;
-  --lp-sidebar: #0a1628;
-  --lp-sidebar-muted: #7d8da3;
-  --lp-font-display: "Fraunces", Georgia, serif;
-  --lp-font-body: "Sora", system-ui, sans-serif;
-  --lp-radius: 12px;
-  --lp-radius-lg: 20px;
-  --lp-shadow: 0 18px 50px rgba(15, 28, 46, 0.08);
+
+  /* Typography & shape */
+  --lp-font-display: var(--lp-font, "Outfit"), system-ui, sans-serif;
+  --lp-font-body: var(--lp-font, "Outfit"), system-ui, sans-serif;
+  --lp-radius: 18px;
+  --lp-radius-lg: 26px;
+  --lp-radius-input: 10px;
+  --lp-shadow: 10px 10px 24px #c3cad9, -10px -10px 24px #ffffff;
+  --lp-shadow-hover: 14px 14px 30px #bcc4d4, -14px -14px 30px #ffffff;
+  --lp-shadow-inset: inset 4px 4px 10px #c3cad9, inset -4px -4px 10px #ffffff;
   --lp-max: 1440px;
+}
+
+/* ---------------------------------------------------------------------------
+ * Switchable design systems. The user picks one via <ThemeSwitcher>; the
+ * choice is stored in localStorage("lp-theme") and applied as
+ * `data-lp-theme` on <html> by an inline script in each app's <head>.
+ * `:root` above IS the default theme — neumorphism (soft extruded surfaces,
+ * dual light/dark shadows, borderless). Glass and clay override below.
+ * ------------------------------------------------------------------------- */
+
+/* Theme: glassmorphism — dark ambient base, translucent blurred surfaces. */
+[data-lp-theme="glass"] {
+  --lp-ink: #e8eefa;
+  --lp-ink-muted: #9da9c4;
+  --lp-paper: #0b1424;
+  --lp-paper-elevated: rgba(255, 255, 255, 0.07);
+  --lp-border: rgba(255, 255, 255, 0.14);
+  --lp-brand: #5b87d6;
+  --lp-brand-soft: rgba(255, 255, 255, 0.09);
+  --lp-accent: #5b87d6;
+  --lp-accent-hover: #7ea2e8;
+  --lp-cta-gradient: linear-gradient(135deg, #5b87d6 0%, #2e5bb0 100%);
+  --lp-shadow: 0 18px 50px rgba(2, 8, 22, 0.55);
+  --lp-shadow-hover: 0 24px 60px rgba(2, 8, 22, 0.68);
+  --lp-shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* Theme: claymorphism — warm pastel base, puffy rounded surfaces with an
+   inner highlight and a soft tinted drop shadow. */
+[data-lp-theme="clay"] {
+  --lp-paper: #efe9e0;
+  --lp-paper-elevated: #faf6f0;
+  --lp-border: transparent;
+  --lp-radius: 20px;
+  --lp-radius-lg: 30px;
+  --lp-shadow:
+    0 20px 40px rgba(121, 100, 78, 0.18),
+    inset 0 2px 3px rgba(255, 255, 255, 0.95);
+  --lp-shadow-hover:
+    0 26px 48px rgba(121, 100, 78, 0.24),
+    inset 0 2px 3px rgba(255, 255, 255, 0.95);
+  --lp-shadow-inset: inset 0 3px 8px rgba(121, 100, 78, 0.12);
+}
+
+/* Per-theme page base. `:root body` outranks each app's plain `body` rule, so
+   the page background always follows the active theme. */
+:root body {
+  background: var(--lp-paper);
+}
+
+[data-lp-theme="glass"] body {
+  background:
+    radial-gradient(ellipse 60% 45% at 85% -5%, color-mix(in srgb, var(--lp-brand) 28%, transparent), transparent 60%),
+    radial-gradient(ellipse 50% 40% at 0% 35%, rgba(46, 91, 176, 0.14), transparent 55%),
+    var(--lp-paper);
+}
+
+[data-lp-theme="clay"] body {
+  background: var(--lp-paper);
+}
+
+/* Per-theme component behavior. */
+[data-lp-theme="glass"] .lp-card {
+  background: var(--lp-paper-elevated);
+  border: 1px solid var(--lp-border);
+  box-shadow: var(--lp-shadow);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+[data-lp-theme="glass"] .lp-input {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--lp-border);
+  box-shadow: none;
+  color: var(--lp-ink);
+}
+
+[data-lp-theme="glass"] .lp-input::placeholder {
+  color: var(--lp-ink-muted);
+}
+
+[data-lp-theme="clay"] .lp-card {
+  background: var(--lp-paper-elevated);
+  border: none;
+  box-shadow: var(--lp-shadow);
+}
+
+[data-lp-theme="clay"] .lp-input {
+  background: var(--lp-paper);
+  border: none;
+  box-shadow: var(--lp-shadow-inset);
+}
+
+/* Eyebrow — section label style: short signal tick + wide-tracked small caps.
+   Replaces pill-shaped badges. */
+.lp-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--lp-ink-muted);
+}
+
+.lp-eyebrow::before {
+  content: "";
+  display: block;
+  width: 1.6rem;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--lp-signal);
+}
+
+.lp-eyebrow--on-dark {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+/* Theme switcher — segmented control; the track uses the theme's inset
+   shadow and the active segment its raised surface, so the control itself
+   demos the active design system. */
+.lp-theme-switch {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--lp-paper);
+  box-shadow: var(--lp-shadow-inset);
+}
+
+.lp-theme-switch button {
+  padding: 0.32rem 0.65rem;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--lp-ink-muted);
+  transition: color 150ms ease;
+}
+
+.lp-theme-switch button[aria-pressed="true"] {
+  background: var(--lp-paper-elevated);
+  color: var(--lp-ink);
+  box-shadow: var(--lp-shadow);
+}
+
+.lp-theme-switch--on-dark {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+}
+
+.lp-theme-switch--on-dark button {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.lp-theme-switch--on-dark button[aria-pressed="true"] {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  box-shadow: none;
+}
+
+/* Sticky portal header — theme-driven instead of hardcoded white. */
+.lp-portal-header {
+  background: color-mix(in srgb, var(--lp-paper-elevated) 82%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--lp-border);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -36,25 +243,23 @@
 
 .lp-portal-sidebar {
   background:
-    radial-gradient(ellipse 80% 50% at 0% 0%, rgba(14, 124, 102, 0.28), transparent 55%),
-    linear-gradient(180deg, #0d1b2f 0%, var(--lp-sidebar) 55%, #07101c 100%);
+    radial-gradient(ellipse 80% 50% at 0% 0%, color-mix(in srgb, var(--lp-brand) 28%, transparent), transparent 55%),
+    linear-gradient(180deg, #0c2438 0%, var(--lp-sidebar) 55%, #07141f 100%);
 }
 
 .lp-portal-workspace {
-  background-image:
-    radial-gradient(ellipse 70% 40% at 100% 0%, rgba(14, 124, 102, 0.08), transparent 50%),
-    linear-gradient(180deg, #eef3f8 0%, var(--lp-paper) 40%, #e8eef5 100%);
+  background: var(--lp-paper);
 }
 
 .lp-auth-story {
   background:
-    radial-gradient(ellipse 60% 50% at 20% 10%, rgba(14, 124, 102, 0.35), transparent 55%),
-    radial-gradient(ellipse 50% 40% at 90% 90%, rgba(201, 146, 18, 0.18), transparent 50%),
-    linear-gradient(160deg, #07101c 0%, #0f1c2e 45%, #0a1628 100%);
+    radial-gradient(ellipse 60% 50% at 20% 10%, color-mix(in srgb, var(--lp-brand) 35%, transparent), transparent 55%),
+    radial-gradient(ellipse 50% 40% at 90% 90%, color-mix(in srgb, var(--lp-signal) 18%, transparent), transparent 50%),
+    linear-gradient(160deg, #07141f 0%, #0d2b45 45%, #0a1f33 100%);
 }
 
 .lp-card {
-  border: 1px solid var(--lp-border);
+  border: none;
   border-radius: var(--lp-radius);
   background: var(--lp-paper-elevated);
   box-shadow: var(--lp-shadow);
@@ -63,9 +268,10 @@
 .lp-input {
   height: 2.75rem;
   width: 100%;
-  border-radius: var(--lp-radius);
-  border: 1px solid var(--lp-border);
-  background: #fff;
+  border-radius: var(--lp-radius-input);
+  border: none;
+  background: var(--lp-paper);
+  box-shadow: var(--lp-shadow-inset);
   padding: 0 0.875rem;
   font-size: 0.875rem;
   color: var(--lp-ink);
@@ -73,8 +279,70 @@
 
 .lp-input:focus-visible {
   outline: none;
-  border-color: var(--lp-accent);
-  box-shadow: 0 0 0 3px rgba(14, 124, 102, 0.2);
+  border-color: var(--lp-brand);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lp-brand) 20%, transparent);
+}
+
+/* Inputs with start/end icons (FormField) ---------------------------------- */
+.lp-input--area {
+  height: auto;
+  min-height: 7rem;
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+  resize: vertical;
+}
+
+.lp-input--with-start {
+  padding-left: 2.75rem;
+}
+
+.lp-input--with-end {
+  padding-right: 2.75rem;
+}
+
+.lp-field {
+  position: relative;
+}
+
+.lp-field-icon {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  display: grid;
+  width: 2.75rem;
+  place-items: center;
+  color: var(--lp-ink-muted);
+  pointer-events: none;
+  transition: color 150ms ease;
+}
+
+.lp-field-icon--end {
+  right: 0;
+  left: auto;
+}
+
+/* Textareas: the start icon aligns with the first line, not the middle. */
+.lp-field-icon--area {
+  inset-block: 0 auto;
+  height: 2.75rem;
+}
+
+.lp-field:focus-within .lp-field-icon {
+  color: var(--lp-brand);
+}
+
+.lp-field-toggle {
+  pointer-events: auto;
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--lp-ink-muted);
+  transition: color 150ms ease;
+}
+
+.lp-field-toggle:hover {
+  color: var(--lp-ink);
 }
 
 .lp-reveal {
@@ -102,4 +370,382 @@
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* Buttons ------------------------------------------------------------------
+ * Themed per design system: neumorphic (default) extrudes secondary buttons
+ * from the page with the dual shadow and presses them in on :active; glass
+ * frosts them; clay makes them puffy with an inner highlight. Primary keeps
+ * the brand gradient in all three, with a theme-tuned shadow.
+ * ------------------------------------------------------------------------- */
+.lp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1.4rem;
+  border: none;
+  border-radius: var(--lp-radius-input);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    background 160ms ease;
+}
+
+.lp-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.lp-btn--primary {
+  background: var(--lp-cta-gradient);
+  color: #fff;
+  box-shadow: 0 12px 28px rgba(22, 56, 110, 0.35);
+}
+
+.lp-btn--secondary {
+  background: var(--lp-paper);
+  color: var(--lp-ink);
+  box-shadow: var(--lp-shadow);
+}
+
+.lp-btn--ghost {
+  background: transparent;
+  color: var(--lp-ink);
+  box-shadow: none;
+}
+
+/* For buttons sitting on dark hero/story bands, in any theme. */
+.lp-btn--on-dark {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: #fff;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.lp-btn:not(:disabled):hover {
+  transform: translateY(-2px);
+}
+
+.lp-btn--primary:not(:disabled):hover {
+  box-shadow: 0 16px 34px rgba(22, 56, 110, 0.45);
+}
+
+.lp-btn--secondary:not(:disabled):hover {
+  box-shadow: var(--lp-shadow-hover);
+}
+
+.lp-btn--ghost:not(:disabled):hover {
+  background: color-mix(in srgb, var(--lp-ink) 6%, transparent);
+  transform: none;
+}
+
+.lp-btn--on-dark:not(:disabled):hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.lp-btn:not(:disabled):active {
+  transform: scale(0.98);
+}
+
+.lp-btn--secondary:not(:disabled):active {
+  box-shadow: var(--lp-shadow-inset);
+}
+
+[data-lp-theme="glass"] .lp-btn--primary {
+  box-shadow: 0 12px 32px rgba(46, 91, 176, 0.45);
+}
+
+[data-lp-theme="glass"] .lp-btn--secondary {
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: var(--lp-ink);
+  box-shadow: none;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+[data-lp-theme="glass"] .lp-btn--secondary:not(:disabled):hover {
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: none;
+}
+
+[data-lp-theme="glass"] .lp-btn--ghost:not(:disabled):hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+[data-lp-theme="clay"] .lp-btn--primary {
+  box-shadow:
+    0 14px 28px rgba(121, 100, 78, 0.25),
+    inset 0 2px 3px rgba(255, 255, 255, 0.35),
+    inset 0 -4px 8px rgba(15, 30, 58, 0.18);
+}
+
+[data-lp-theme="clay"] .lp-btn--secondary {
+  background: var(--lp-paper-elevated);
+  box-shadow: var(--lp-shadow);
+}
+
+[data-lp-theme="clay"] .lp-btn:not(:disabled):active {
+  transform: scale(0.96);
+}
+
+/* Icon chips ----------------------------------------------------------------
+ * Small square/circular icon containers (feature cards, stat chips, etc.).
+ * Neumorphic renders them as raised circles, glass as frosted squares, clay
+ * as puffy rounded squares.
+ * ------------------------------------------------------------------------- */
+.lp-icon-chip {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--lp-paper);
+  color: var(--lp-brand);
+  box-shadow: var(--lp-shadow);
+}
+
+[data-lp-theme="glass"] .lp-icon-chip {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+[data-lp-theme="clay"] .lp-icon-chip {
+  border-radius: 16px;
+  background: var(--lp-paper-elevated);
+  box-shadow: var(--lp-shadow);
+}
+
+/* Product preview mock (marketing) ------------------------------------------
+ * The mock sits on the dark navy hero, so it is navy itself — a white card
+ * there reads as a glowing slab. `.lp-preview` re-scopes the design tokens
+ * for its subtree (light ink, translucent surfaces), so everything inside —
+ * text, progress ring, icon chip — adapts without per-element overrides.
+ * ------------------------------------------------------------------------- */
+/* Dark scopes (hero bands, previews) ------------------------------------------
+ * Elements on dark navy surfaces need light ink + translucent surfaces +
+ * dark-tinted shadows. `.lp-dark-scope` re-scopes the tokens for its subtree;
+ * `.lp-dark-tile` is the raised navy tile for grids on those bands.
+ * ------------------------------------------------------------------------- */
+.lp-dark-scope {
+  --lp-ink: #e9eefb;
+  --lp-ink-muted: #a3b2d4;
+  --lp-paper: rgba(9, 23, 50, 0.6);
+  --lp-paper-elevated: rgba(255, 255, 255, 0.07);
+  --lp-border: rgba(255, 255, 255, 0.16);
+  --lp-brand: #9db9ec;
+  --lp-brand-soft: rgba(255, 255, 255, 0.12);
+  --lp-shadow: 4px 4px 12px rgba(5, 14, 32, 0.5), -3px -3px 10px rgba(80, 120, 190, 0.12);
+}
+
+.lp-dark-tile {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--lp-radius);
+  box-shadow:
+    4px 4px 10px rgba(5, 14, 32, 0.4),
+    -3px -3px 8px rgba(80, 120, 190, 0.08);
+}
+
+[data-lp-theme="glass"] .lp-dark-tile {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow: none;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.lp-preview {
+  background: linear-gradient(165deg, #1b427e 0%, #143058 55%, #10264c 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 30px 60px rgba(4, 12, 28, 0.55);
+}
+
+.lp-preview-well {
+  border-radius: var(--lp-radius);
+  background: rgba(8, 20, 44, 0.5);
+  box-shadow:
+    inset 3px 3px 8px rgba(4, 12, 28, 0.55),
+    inset -2px -2px 6px rgba(80, 120, 190, 0.1);
+}
+
+.lp-preview-row {
+  border-radius: calc(var(--lp-radius) - 6px);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow:
+    4px 4px 10px rgba(5, 14, 32, 0.45),
+    -3px -3px 8px rgba(80, 120, 190, 0.1);
+}
+
+.lp-icon-chip--sm {
+  width: 2.25rem;
+  height: 2.25rem;
+}
+
+/* Marketing footer ---------------------------------------------------------- */
+.lp-footer {
+  background: var(--lp-paper-elevated);
+  border-top: 1px solid var(--lp-border);
+}
+
+[data-lp-theme="glass"] .lp-footer {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* Marketing light-variant nav bar — theme surface instead of hardcoded white. */
+.lp-nav-light {
+  border: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--lp-paper-elevated) 88%, transparent);
+  box-shadow: var(--lp-shadow);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Watermarks (decorative background marks) -----------------------------------
+ * RentOS pattern: faint icon/logo bleeds off a section edge. Tint lives in
+ * the text color (icons use currentColor), so one class works on any surface
+ * and follows the active theme (in glass, --lp-ink is already light).
+ * Parents need `relative overflow-hidden`.
+ * ------------------------------------------------------------------------- */
+.lp-watermark {
+  position: absolute;
+  pointer-events: none;
+  user-select: none;
+  color: color-mix(in srgb, var(--lp-ink) 7%, transparent);
+}
+
+.lp-watermark--on-dark {
+  color: rgba(255, 255, 255, 0.1);
+}
+
+.lp-watermark > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Sidebar nav (kedland pattern) ----------------------------------------------
+ * Icon in a bordered chip + truncated label + optional badge; the active item
+ * gets three layered cues — accent left bar, signal wash, top hairline. Tree
+ * connector lines run from the group heading down through the items.
+ * ------------------------------------------------------------------------- */
+.lp-nav-item {
+  position: relative;
+  display: flex;
+  min-height: 2.5rem;
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.62);
+  transition: all 180ms ease;
+}
+
+.lp-nav-item:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+}
+
+.lp-nav-node {
+  display: grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex-shrink: 0;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow:
+    3px 4px 9px rgba(3, 20, 36, 0.24),
+    inset 1px 1px 0 rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.55);
+  transition: all 180ms ease;
+}
+
+.lp-nav-item:hover .lp-nav-node {
+  border-color: rgba(255, 255, 255, 0.25);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.lp-nav-item--active,
+.lp-nav-item--active:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: color-mix(in srgb, var(--lp-signal) 22%, transparent);
+  box-shadow:
+    0 8px 18px rgba(3, 20, 36, 0.22),
+    inset 3px 0 0 var(--lp-signal),
+    inset 1px 1px 0 rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-weight: 600;
+}
+
+.lp-nav-item--active .lp-nav-node {
+  border-color: color-mix(in srgb, var(--lp-signal) 55%, transparent);
+  background: color-mix(in srgb, var(--lp-signal) 20%, transparent);
+  color: #fff;
+}
+
+.lp-nav-badge {
+  min-width: 1.25rem;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--lp-signal);
+  padding: 0.125rem 0.375rem;
+  text-align: center;
+  font-size: 0.62rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+.lp-nav-dot {
+  width: 0.375rem;
+  height: 0.375rem;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--lp-signal);
+}
+
+.lp-nav-branch {
+  position: relative;
+  padding-left: 0.9rem;
+}
+
+.lp-nav-branch::before {
+  content: "";
+  position: absolute;
+  top: -0.2rem;
+  bottom: 1.1rem;
+  left: 0.5rem;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.lp-nav-branch > li {
+  position: relative;
+}
+
+.lp-nav-branch > li::before {
+  content: "";
+  position: absolute;
+  top: 1.2rem;
+  left: -0.4rem;
+  width: 0.4rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
 }

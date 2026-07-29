@@ -1,6 +1,11 @@
 @import "tailwindcss";
 @import "@launchpad/ui/styles.css";
 
+/* Tailwind v4 skips node_modules when auto-detecting class sources, so the
+   workspace UI package (symlinked) must be scanned explicitly or its
+   component classes (AuthShell, PortalShell, …) never generate. */
+@source "../../../packages/ui/src";
+
 html,
 body {
   margin: 0;
@@ -10,14 +15,7 @@ body {
   font-family: var(--lp-font-body);
 }
 
-body {
-  background-image:
-    radial-gradient(ellipse 80% 50% at 10% -10%, rgba(14, 124, 102, 0.18), transparent 55%),
-    radial-gradient(ellipse 70% 45% at 90% 0%, rgba(15, 28, 46, 0.12), transparent 50%),
-    linear-gradient(180deg, #eef3f8 0%, var(--lp-paper) 40%, #e8eef5 100%);
-  background-attachment: fixed;
-}
-
+/* Entrance animations ----------------------------------------------------- */
 @keyframes lp-rise {
   from {
     opacity: 0;
@@ -37,11 +35,58 @@ body {
   animation: lp-rise 800ms ease-out 120ms both;
 }
 
-.lp-hero-plane {
-  min-height: 100vh;
-  background-image:
-    linear-gradient(120deg, rgba(15, 28, 46, 0.72), rgba(14, 124, 102, 0.45)),
-    url("https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=2400&q=80");
-  background-size: cover;
-  background-position: center;
+.lp-rise-delay-2 {
+  animation: lp-rise 800ms ease-out 240ms both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-rise,
+  .lp-rise-delay,
+  .lp-rise-delay-2 {
+    animation: none;
+  }
+}
+
+/* Hero -------------------------------------------------------------------- */
+.lp-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  color: #fff;
+  background:
+    radial-gradient(ellipse 70% 60% at 12% 0%, rgba(46, 91, 176, 0.45), transparent 60%),
+    radial-gradient(ellipse 55% 50% at 100% 100%, rgba(167, 182, 208, 0.18), transparent 55%),
+    linear-gradient(160deg, #0f1e3a 0%, #16386e 52%, #0b1b33 100%);
+}
+
+/* Subtle dotted grid over the hero for depth. */
+.lp-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.10) 1px, transparent 1px);
+  background-size: 26px 26px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.7), transparent 75%);
+  -webkit-mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.7), transparent 75%);
+}
+
+/* Floating pill navbar ---------------------------------------------------- */
+.lp-nav-pill {
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(15, 30, 58, 0.55);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 12px 40px rgba(7, 20, 40, 0.35);
+}
+
+/* Feature card hover ------------------------------------------------------ */
+.lp-feature-card {
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.lp-feature-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--lp-shadow-hover);
 }

@@ -14,6 +14,7 @@ import (
 )
 
 const (
+	fieldID             = "_id"
 	fieldOrganizationID = "organizationId"
 	fieldCreatedAt      = "createdAt"
 	fieldTemplateID     = "journeyTemplateId"
@@ -55,6 +56,7 @@ func (s *Store) EnsureIndexes(ctx context.Context) error {
 				{Key: fieldVersion, Value: 1},
 				{Key: fieldPosition, Value: 1},
 			},
+			Options: options.Index().SetUnique(true),
 		},
 	})
 	if err != nil {
@@ -79,7 +81,7 @@ func (s *Store) GetTemplate(ctx context.Context, organizationID, templateID stri
 	var template journeys.Template
 
 	err := s.templates.FindOne(ctx, bson.M{
-		"_id":               templateID,
+		fieldID:             templateID,
 		fieldOrganizationID: organizationID,
 	}).Decode(&template)
 	if errors.Is(err, drivermongo.ErrNoDocuments) {
@@ -114,7 +116,7 @@ func (s *Store) ListTemplates(ctx context.Context, organizationID string) ([]jou
 // UpdateTemplate replaces a template document.
 func (s *Store) UpdateTemplate(ctx context.Context, template journeys.Template) error {
 	res, err := s.templates.ReplaceOne(ctx, bson.M{
-		"_id":               template.ID,
+		fieldID:             template.ID,
 		fieldOrganizationID: template.OrganizationID,
 	}, template)
 	if err != nil {
@@ -131,8 +133,53 @@ func (s *Store) UpdateTemplate(ctx context.Context, template journeys.Template) 
 // CreateStep inserts a journey step.
 func (s *Store) CreateStep(ctx context.Context, step journeys.Step) error {
 	_, err := s.steps.InsertOne(ctx, step)
+	if drivermongo.IsDuplicateKeyError(err) {
+		return journeys.ErrStepPositionTaken
+	}
+
 	if err != nil {
 		return fmt.Errorf("insert journey step: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateStep replaces a step document.
+func (s *Store) UpdateStep(ctx context.Context, step journeys.Step) error {
+	res, err := s.steps.ReplaceOne(ctx, bson.M{
+		fieldID:             step.ID,
+		fieldOrganizationID: step.OrganizationID,
+	}, step)
+	if err != nil {
+		return fmt.Errorf("replace journey step: %w", err)
+	}
+
+	if res.MatchedCount == 0 {
+		return journeys.ErrStepNotFound
+	}
+
+	return nil
+}
+
+// DeleteStep removes a step from a template version.
+func (s *Store) DeleteStep(
+	ctx context.Context,
+	organizationID, templateID string,
+	version int,
+	stepID string,
+) error {
+	res, err := s.steps.DeleteOne(ctx, bson.M{
+		fieldID:             stepID,
+		fieldOrganizationID: organizationID,
+		fieldTemplateID:     templateID,
+		fieldVersion:        version,
+	})
+	if err != nil {
+		return fmt.Errorf("delete journey step: %w", err)
+	}
+
+	if res.DeletedCount == 0 {
+		return journeys.ErrStepNotFound
 	}
 
 	return nil
@@ -199,4 +246,23 @@ func joinCursorErrors(label string, decodeErr, closeErr error) error {
 	}
 
 	return nil
+}
+
+// DeleteForOrganization removes every journey template and step of the
+// organization and returns the number of documents deleted. It serves only
+// the platform GDPR tenant purge (PRD 7.4).
+func (s *Store) DeleteForOrganization(ctx context.Context, organizationID string) (int64, error) {
+	res, err := s.templates.DeleteMany(ctx, bson.M{fieldOrganizationID: organizationID})
+	if err != nil {
+		return 0, fmt.Errorf("delete journey templates for organization: %w", err)
+	}
+
+	deleted := res.DeletedCount
+
+	res, err = s.steps.DeleteMany(ctx, bson.M{fieldOrganizationID: organizationID})
+	if err != nil {
+		return 0, fmt.Errorf("delete journey steps for organization: %w", err)
+	}
+
+	return deleted + res.DeletedCount, nil
 }

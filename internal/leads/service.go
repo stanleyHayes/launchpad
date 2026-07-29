@@ -36,14 +36,18 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (Lead, error) {
 	}
 
 	lead := Lead{
-		ID:        uuid.NewString(),
-		Name:      name,
-		Email:     email,
-		Company:   company,
-		Message:   message,
-		Source:    source,
-		Status:    statusNew,
-		CreatedAt: time.Now().UTC(),
+		ID:           uuid.NewString(),
+		Name:         name,
+		Email:        email,
+		Company:      company,
+		Message:      message,
+		Source:       source,
+		UTMSource:    strings.TrimSpace(in.UTMSource),
+		UTMMedium:    strings.TrimSpace(in.UTMMedium),
+		UTMCampaign:  strings.TrimSpace(in.UTMCampaign),
+		ScheduledFor: in.ScheduledFor,
+		Status:       statusNew,
+		CreatedAt:    time.Now().UTC(),
 	}
 	if err := s.repo.Create(ctx, lead); err != nil {
 		return Lead{}, fmt.Errorf("create lead: %w", err)
@@ -52,9 +56,10 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (Lead, error) {
 	return lead, nil
 }
 
-// List returns all leads for platform review.
-func (s *Service) List(ctx context.Context) ([]Lead, error) {
-	items, err := s.repo.List(ctx)
+// List returns a page of leads for platform review, newest first. before is
+// the keyset cursor: when non-zero, only leads created before it are returned.
+func (s *Service) List(ctx context.Context, limit int64, before time.Time) ([]Lead, error) {
+	items, err := s.repo.List(ctx, limit, before)
 	if err != nil {
 		return nil, fmt.Errorf("list leads: %w", err)
 	}

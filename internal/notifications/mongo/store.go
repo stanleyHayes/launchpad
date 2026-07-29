@@ -11,9 +11,11 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"launchpad/internal/notifications"
+	"launchpad/pkg/security"
 )
 
 const (
+	fieldID             = "_id"
 	fieldOrganizationID = "organizationId"
 	fieldUserID         = "userId"
 	fieldCreatedAt      = "createdAt"
@@ -63,7 +65,7 @@ func (s *Store) ListForUser(ctx context.Context, organizationID, userID string) 
 	cursor, err := s.col.Find(ctx, bson.M{
 		fieldOrganizationID: organizationID,
 		fieldUserID:         userID,
-	}, options.Find().SetSort(bson.D{{Key: fieldCreatedAt, Value: -1}}))
+	}, options.Find().SetSort(bson.D{{Key: fieldCreatedAt, Value: -1}}).SetLimit(defaultListLimit))
 	if err != nil {
 		return nil, fmt.Errorf("find notifications: %w", err)
 	}
@@ -116,7 +118,7 @@ func (s *Store) Get(
 // Update replaces a notification scoped to its recipient and organization.
 func (s *Store) Update(ctx context.Context, notification notifications.Notification) error {
 	res, err := s.col.ReplaceOne(ctx, bson.M{
-		"_id":               notification.ID,
+		fieldID:             notification.ID,
 		fieldOrganizationID: notification.OrganizationID,
 		fieldUserID:         notification.UserID,
 	}, notification)
@@ -129,4 +131,94 @@ func (s *Store) Update(ctx context.Context, notification notifications.Notificat
 	}
 
 	return nil
+}
+
+var _ notifications.ChannelStore = (*ChannelStore)(nil)
+
+// ChannelStore persists per-organization outbound channel configuration, keyed
+// by organization id.
+type ChannelStore struct {
+	col *drivermongo.Collection
+}
+
+// NewChannelStore constructs a ChannelStore.
+func NewChannelStore(db *drivermongo.Database) *ChannelStore {
+	return &ChannelStore{col: db.Collection("notification_channels")}
+}
+
+// EnsureIndexes is a no-op: the collection is keyed by _id (organization id).
+func (s *ChannelStore) EnsureIndexes(context.Context) error { return nil }
+
+// GetChannels loads a tenant's channel config.
+func (s *ChannelStore) GetChannels(ctx context.Context, organizationID string) (notifications.ChannelConfig, error) {
+	var config notifications.ChannelConfig
+
+	err := s.col.FindOne(ctx, bson.M{fieldID: organizationID}).Decode(&config)
+	if errors.Is(err, drivermongo.ErrNoDocuments) {
+		return notifications.ChannelConfig{}, notifications.ErrNotFound
+	}
+
+	if err != nil {
+		return notifications.ChannelConfig{}, fmt.Errorf("find channel config: %w", err)
+	}
+
+	if config.SlackWebhookURL, err = security.DecryptSecret(config.SlackWebhookURL); err != nil {
+		return notifications.ChannelConfig{}, fmt.Errorf("decrypt slack webhook url: %w", err)
+	}
+
+	if config.TeamsWebhookURL, err = security.DecryptSecret(config.TeamsWebhookURL); err != nil {
+		return notifications.ChannelConfig{}, fmt.Errorf("decrypt teams webhook url: %w", err)
+	}
+
+	return config, nil
+}
+
+// SetChannels upserts a tenant's channel config. Webhook URLs (bearer
+// credentials) are encrypted at rest when ENCRYPTION_KEY is configured.
+func (s *ChannelStore) SetChannels(ctx context.Context, config notifications.ChannelConfig) error {
+	var err error
+
+	if config.SlackWebhookURL, err = security.EncryptSecret(config.SlackWebhookURL); err != nil {
+		return fmt.Errorf("encrypt slack webhook url: %w", err)
+	}
+
+	if config.TeamsWebhookURL, err = security.EncryptSecret(config.TeamsWebhookURL); err != nil {
+		return fmt.Errorf("encrypt teams webhook url: %w", err)
+	}
+
+	_, err = s.col.ReplaceOne(
+		ctx,
+		bson.M{fieldID: config.OrganizationID},
+		config,
+		options.Replace().SetUpsert(true),
+	)
+	if err != nil {
+		return fmt.Errorf("upsert channel config: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteForOrganization removes every notification of the organization and
+// returns the number deleted. It serves only the platform GDPR tenant purge
+// (PRD 7.4).
+func (s *Store) DeleteForOrganization(ctx context.Context, organizationID string) (int64, error) {
+	res, err := s.col.DeleteMany(ctx, bson.M{fieldOrganizationID: organizationID})
+	if err != nil {
+		return 0, fmt.Errorf("delete notifications for organization: %w", err)
+	}
+
+	return res.DeletedCount, nil
+}
+
+// DeleteForOrganization removes the organization's channel config (keyed by
+// organization id) and returns the number of documents deleted. It serves
+// only the platform GDPR tenant purge (PRD 7.4).
+func (s *ChannelStore) DeleteForOrganization(ctx context.Context, organizationID string) (int64, error) {
+	res, err := s.col.DeleteMany(ctx, bson.M{fieldID: organizationID})
+	if err != nil {
+		return 0, fmt.Errorf("delete notification channels for organization: %w", err)
+	}
+
+	return res.DeletedCount, nil
 }

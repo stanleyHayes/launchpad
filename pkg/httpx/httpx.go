@@ -4,8 +4,14 @@ package httpx
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 )
+
+// maxRequestBodyBytes bounds a decoded JSON request body so a client cannot
+// exhaust memory with a multi-gigabyte payload. 4 MiB is generous for any JSON
+// API request while capping the worst case.
+const maxRequestBodyBytes = 4 << 20
 
 // ErrorBody is the standard API error payload.
 type ErrorBody struct {
@@ -55,7 +61,7 @@ func DecodeJSON(r *http.Request, dst any) (err error) {
 		}
 	}()
 
-	dec := json.NewDecoder(r.Body)
+	dec := json.NewDecoder(io.LimitReader(r.Body, maxRequestBodyBytes))
 	dec.DisallowUnknownFields()
 
 	if decodeErr := dec.Decode(dst); decodeErr != nil {

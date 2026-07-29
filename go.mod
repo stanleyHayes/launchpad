@@ -12,8 +12,14 @@ require (
 )
 
 require (
+	github.com/beevik/etree v1.5.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/crewjam/saml v0.5.1 // indirect
+	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
+	github.com/jonboulle/clockwork v0.2.2 // indirect
 	github.com/klauspost/compress v1.19.1 // indirect
+	github.com/mattermost/xml-roundtrip-validator v0.1.0 // indirect
+	github.com/russellhaering/goxmldsig v1.4.0 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/xdg-go/scram v1.2.0 // indirect
 	github.com/xdg-go/stringprep v1.0.4 // indirect

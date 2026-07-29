@@ -3,44 +3,15 @@
 import Link from "next/link";
 import { useState, useTransition, type SyntheticEvent } from "react";
 import { ApiError, createLaunchPadClient } from "@launchpad/api-client";
-import { Container } from "@launchpad/ui";
-
-const apiBaseUrl =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
-const orgAdminUrl =
-  process.env.NEXT_PUBLIC_ORG_ADMIN_URL ?? "http://localhost:3002";
+import { Container, LogoTile } from "@launchpad/ui";
+import { SiteFooter } from "../site-footer";
+import { SiteHeader } from "../site-header";
+import { apiBaseUrl, orgAdminUrl } from "../env";
+import { FormField } from "../form-field";
 
 function formString(form: FormData, key: string): string {
   const value = form.get(key);
   return typeof value === "string" ? value.trim() : "";
-}
-
-function Field({
-  label,
-  name,
-  type,
-  required,
-  minLength,
-}: {
-  label: string;
-  name: string;
-  type: string;
-  required?: boolean;
-  minLength?: number;
-}) {
-  return (
-    <label className="block text-sm text-[var(--lp-ink)]">
-      {label}
-      <input
-        className="mt-1 w-full rounded-[var(--lp-radius)] border border-[var(--lp-border)] bg-white px-3 py-2"
-        name={name}
-        type={type}
-        required={required}
-        minLength={minLength}
-        autoComplete={type === "password" ? "new-password" : "on"}
-      />
-    </label>
-  );
 }
 
 export function SignupForm() {
@@ -88,10 +59,13 @@ export function SignupForm() {
   }
 
   return (
-    <main className="min-h-screen py-24">
+    <main className="relative min-h-screen">
+      <SiteHeader variant="light" />
+      <section className="pb-16 pt-36">
       <Container className="max-w-lg">
-        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[var(--lp-accent)]">
-          LaunchPad
+        <LogoTile size={40} />
+        <p className="lp-eyebrow mt-5">
+          Start free
         </p>
         <h1
           className="mt-4 text-4xl font-semibold tracking-tight"
@@ -103,26 +77,33 @@ export function SignupForm() {
           Create your organization and jump into the admin portal.
         </p>
 
-        <form onSubmit={onSubmit} className="mt-10 space-y-4">
-          <Field label="Work email" name="email" type="email" required />
-          <Field label="Your name" name="displayName" type="text" required />
-          <Field
+        <form onSubmit={onSubmit} className="mt-10 space-y-5">
+          <FormField label="Work email" name="email" type="email" required startIcon="mail" autoComplete="email" placeholder="you@company.com" />
+          <FormField label="Your name" name="displayName" type="text" required startIcon="user" autoComplete="name" placeholder="Priya Shah" />
+          <FormField
             label="Organization name"
             name="organizationName"
             type="text"
             required
+            startIcon="building"
+            autoComplete="organization"
+            placeholder="Northwind Labs"
           />
-          <Field
+          <FormField
             label="Organization slug (optional)"
             name="organizationSlug"
             type="text"
+            startIcon="at-sign"
+            placeholder="northwind"
           />
-          <Field
+          <FormField
             label="Password"
             name="password"
             type="password"
             minLength={10}
             required
+            startIcon="lock"
+            placeholder="At least 10 characters"
           />
 
           {error ? (
@@ -134,7 +115,7 @@ export function SignupForm() {
           <button
             type="submit"
             disabled={pending}
-            className="w-full rounded-[var(--lp-radius)] bg-[var(--lp-accent)] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[var(--lp-accent-hover)] disabled:opacity-60"
+            className="lp-btn lp-btn--primary w-full"
           >
             {pending ? "Creating account…" : "Create account"}
           </button>
@@ -147,6 +128,9 @@ export function SignupForm() {
           </Link>
         </p>
       </Container>
+      </section>
+
+      <SiteFooter />
     </main>
   );
 }

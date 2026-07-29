@@ -1,6 +1,9 @@
 package assignments
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Repository persists journey assignments, step assignments, and approvals.
 type Repository interface {
@@ -16,8 +19,20 @@ type Repository interface {
 	ListSteps(ctx context.Context, organizationID, journeyAssignmentID string) ([]StepAssignment, error)
 	GetStep(ctx context.Context, organizationID, stepAssignmentID string) (StepAssignment, error)
 	UpdateStep(ctx context.Context, step StepAssignment) error
+	// ListDueSoonSteps returns incomplete steps due in (from, to] that have
+	// not yet received a due-soon notification. Cross-organization; used by
+	// the scheduler sweep.
+	ListDueSoonSteps(ctx context.Context, from, to time.Time) ([]StepAssignment, error)
+	// ListOverdueSteps returns incomplete steps due before now that have not
+	// yet received an overdue notification.
+	ListOverdueSteps(ctx context.Context, now time.Time) ([]StepAssignment, error)
 	GetApproval(ctx context.Context, organizationID, approvalID string) (Approval, error)
 	ListApprovals(ctx context.Context, organizationID string) ([]Approval, error)
 	GetApprovalByStep(ctx context.Context, organizationID, stepAssignmentID string) (Approval, error)
 	UpdateApproval(ctx context.Context, approval Approval) error
+	// DeleteForOrganization removes every assignment, step assignment,
+	// approval, and assignment rule of the organization and returns the
+	// number of documents deleted. Called only by the platform GDPR tenant
+	// purge (PRD 7.4).
+	DeleteForOrganization(ctx context.Context, organizationID string) (int64, error)
 }

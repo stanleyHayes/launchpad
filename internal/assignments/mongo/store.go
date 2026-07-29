@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	drivermongo "go.mongodb.org/mongo-driver/v2/mongo"
@@ -18,18 +19,25 @@ const (
 	fieldOrganizationID = "organizationId"
 	fieldEmployeeID     = "employeeId"
 	fieldCreatedAt      = "createdAt"
+	fieldDueAt          = "dueAt"
+	fieldStatus         = "status"
 
 	statusScheduled  = "scheduled"
 	statusInProgress = "in_progress"
+	statusCompleted  = "completed"
 )
 
-var _ assignments.Repository = (*Store)(nil)
+var (
+	_ assignments.Repository     = (*Store)(nil)
+	_ assignments.RuleRepository = (*Store)(nil)
+)
 
 // Store persists journey and step assignments.
 type Store struct {
 	assignments *drivermongo.Collection
 	steps       *drivermongo.Collection
 	approvals   *drivermongo.Collection
+	rules       *drivermongo.Collection
 }
 
 // NewStore constructs a Store.
@@ -38,6 +46,7 @@ func NewStore(db *drivermongo.Database) *Store {
 		assignments: db.Collection("journey_assignments"),
 		steps:       db.Collection("step_assignments"),
 		approvals:   db.Collection("approvals"),
+		rules:       db.Collection("assignment_rules"),
 	}
 }
 
@@ -66,17 +75,26 @@ func (s *Store) EnsureIndexes(ctx context.Context) error {
 			},
 		},
 		{Keys: bson.D{{Key: fieldOrganizationID, Value: 1}, {Key: fieldEmployeeID, Value: 1}}},
+		// Backs the scheduler due-soon/overdue sweeps.
+		{Keys: bson.D{{Key: fieldStatus, Value: 1}, {Key: fieldDueAt, Value: 1}}},
 	})
 	if err != nil {
 		return fmt.Errorf("ensure step assignment indexes: %w", err)
 	}
 
 	_, err = s.approvals.Indexes().CreateMany(ctx, []drivermongo.IndexModel{
-		{Keys: bson.D{{Key: fieldOrganizationID, Value: 1}, {Key: "status", Value: 1}, {Key: fieldCreatedAt, Value: -1}}},
+		{Keys: bson.D{{Key: fieldOrganizationID, Value: 1}, {Key: fieldStatus, Value: 1}, {Key: fieldCreatedAt, Value: -1}}},
 		{Keys: bson.D{{Key: fieldOrganizationID, Value: 1}, {Key: "stepAssignmentId", Value: 1}}},
 	})
 	if err != nil {
 		return fmt.Errorf("ensure approval indexes: %w", err)
+	}
+
+	_, err = s.rules.Indexes().CreateMany(ctx, []drivermongo.IndexModel{
+		{Keys: bson.D{{Key: fieldOrganizationID, Value: 1}, {Key: fieldCreatedAt, Value: -1}}},
+	})
+	if err != nil {
+		return fmt.Errorf("ensure assignment rule indexes: %w", err)
 	}
 
 	return nil
@@ -132,7 +150,7 @@ func (s *Store) FindActiveAssignment(
 		fieldOrganizationID: organizationID,
 		fieldEmployeeID:     employeeID,
 		"journeyTemplateId": templateID,
-		"status":            bson.M{"$in": []string{statusScheduled, statusInProgress}},
+		fieldStatus:         bson.M{"$in": []string{statusScheduled, statusInProgress}},
 	}).Decode(&assignment)
 	if errors.Is(err, drivermongo.ErrNoDocuments) {
 		return assignments.JourneyAssignment{}, assignments.ErrNotFound
@@ -263,6 +281,21 @@ func (s *Store) UpdateStep(ctx context.Context, step assignments.StepAssignment)
 	return nil
 }
 
+// ListDueSoonSteps returns incomplete steps due in (from, to] that have not
+// yet received a due-soon notification.
+func (s *Store) ListDueSoonSteps(
+	ctx context.Context,
+	from, to time.Time,
+) ([]assignments.StepAssignment, error) {
+	return s.findStepsByDue(ctx, bson.M{"$gt": from, "$lte": to}, "dueSoonNotifiedAt")
+}
+
+// ListOverdueSteps returns incomplete steps due before now that have not yet
+// received an overdue notification.
+func (s *Store) ListOverdueSteps(ctx context.Context, now time.Time) ([]assignments.StepAssignment, error) {
+	return s.findStepsByDue(ctx, bson.M{"$lt": now}, "overdueNotifiedAt")
+}
+
 // GetApproval returns one approval.
 func (s *Store) GetApproval(ctx context.Context, organizationID, approvalID string) (assignments.Approval, error) {
 	var approval assignments.Approval
@@ -337,6 +370,131 @@ func (s *Store) UpdateApproval(ctx context.Context, approval assignments.Approva
 	}
 
 	return nil
+}
+
+// CreateRule inserts an assignment rule.
+func (s *Store) CreateRule(ctx context.Context, rule assignments.Rule) error {
+	_, err := s.rules.InsertOne(ctx, rule)
+	if err != nil {
+		return fmt.Errorf("insert assignment rule: %w", err)
+	}
+
+	return nil
+}
+
+// GetRule returns one assignment rule.
+func (s *Store) GetRule(ctx context.Context, organizationID, ruleID string) (assignments.Rule, error) {
+	var rule assignments.Rule
+
+	err := s.rules.FindOne(ctx, bson.M{
+		fieldID:             ruleID,
+		fieldOrganizationID: organizationID,
+	}).Decode(&rule)
+	if errors.Is(err, drivermongo.ErrNoDocuments) {
+		return assignments.Rule{}, assignments.ErrNotFound
+	}
+
+	if err != nil {
+		return assignments.Rule{}, fmt.Errorf("find assignment rule: %w", err)
+	}
+
+	return rule, nil
+}
+
+// ListRules lists assignment rules for an organization.
+func (s *Store) ListRules(ctx context.Context, organizationID string) ([]assignments.Rule, error) {
+	cursor, err := s.rules.Find(
+		ctx,
+		bson.M{fieldOrganizationID: organizationID},
+		options.Find().SetSort(bson.D{{Key: fieldCreatedAt, Value: -1}}),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find assignment rules: %w", err)
+	}
+
+	items := make([]assignments.Rule, 0)
+	decodeErr := cursor.All(ctx, &items)
+	closeErr := cursor.Close(ctx)
+
+	return items, joinCursorErrors("assignment rules", decodeErr, closeErr)
+}
+
+// UpdateRule replaces an assignment rule.
+func (s *Store) UpdateRule(ctx context.Context, rule assignments.Rule) error {
+	res, err := s.rules.ReplaceOne(ctx, bson.M{
+		fieldID:             rule.ID,
+		fieldOrganizationID: rule.OrganizationID,
+	}, rule)
+	if err != nil {
+		return fmt.Errorf("replace assignment rule: %w", err)
+	}
+
+	if res.MatchedCount == 0 {
+		return assignments.ErrNotFound
+	}
+
+	return nil
+}
+
+// DeleteRule removes an assignment rule.
+func (s *Store) DeleteRule(ctx context.Context, organizationID, ruleID string) error {
+	res, err := s.rules.DeleteOne(ctx, bson.M{
+		fieldID:             ruleID,
+		fieldOrganizationID: organizationID,
+	})
+	if err != nil {
+		return fmt.Errorf("delete assignment rule: %w", err)
+	}
+
+	if res.DeletedCount == 0 {
+		return assignments.ErrNotFound
+	}
+
+	return nil
+}
+
+// DeleteForOrganization removes every journey assignment, step assignment,
+// approval, and assignment rule of the organization and returns the number
+// of documents deleted. It serves only the platform GDPR tenant purge
+// (PRD 7.4).
+func (s *Store) DeleteForOrganization(ctx context.Context, organizationID string) (int64, error) {
+	var deleted int64
+
+	for _, col := range []*drivermongo.Collection{s.assignments, s.steps, s.approvals, s.rules} {
+		res, err := col.DeleteMany(ctx, bson.M{fieldOrganizationID: organizationID})
+		if err != nil {
+			return 0, fmt.Errorf("delete assignments data for organization: %w", err)
+		}
+
+		deleted += res.DeletedCount
+	}
+
+	return deleted, nil
+}
+
+func (s *Store) findStepsByDue(
+	ctx context.Context,
+	dueRange bson.M,
+	notifiedField string,
+) ([]assignments.StepAssignment, error) {
+	cursor, err := s.steps.Find(
+		ctx,
+		bson.M{
+			fieldStatus:   bson.M{"$ne": statusCompleted},
+			fieldDueAt:    dueRange,
+			notifiedField: bson.M{"$exists": false},
+		},
+		options.Find().SetSort(bson.D{{Key: fieldDueAt, Value: 1}}),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find step assignments by due date: %w", err)
+	}
+
+	items := make([]assignments.StepAssignment, 0)
+	decodeErr := cursor.All(ctx, &items)
+	closeErr := cursor.Close(ctx)
+
+	return items, joinCursorErrors("step assignments by due date", decodeErr, closeErr)
 }
 
 func (s *Store) findAssignments(ctx context.Context, filter bson.M) ([]assignments.JourneyAssignment, error) {

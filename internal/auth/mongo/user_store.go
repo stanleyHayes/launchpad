@@ -70,6 +70,16 @@ func (s *UserStore) GetByEmail(ctx context.Context, email string) (auth.User, er
 	return user, nil
 }
 
+// Update replaces a user document by id. The caller is expected to have loaded
+// the user first, so a missing document is treated as an unexpected error.
+func (s *UserStore) Update(ctx context.Context, user auth.User) error {
+	if _, err := s.col.ReplaceOne(ctx, bson.M{"_id": user.ID}, user); err != nil {
+		return fmt.Errorf("update user: %w", err)
+	}
+
+	return nil
+}
+
 // GetByID loads a user by identifier.
 func (s *UserStore) GetByID(ctx context.Context, id string) (auth.User, error) {
 	var user auth.User

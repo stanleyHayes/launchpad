@@ -2,7 +2,9 @@ package featureflags
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"hash/fnv"
 	"slices"
 	"strings"
 	"time"
@@ -26,7 +28,8 @@ func NewService(repo Repository, orgs OrganizationReader) *Service {
 	return &Service{repo: repo, orgs: orgs}
 }
 
-// SeedDefaults upserts built-in feature flags.
+// SeedDefaults inserts built-in feature flags that are missing. Existing flags
+// are left untouched so admin changes survive restarts.
 func (s *Service) SeedDefaults(ctx context.Context) error {
 	now := time.Now().UTC()
 
@@ -56,9 +59,10 @@ func (s *Service) SeedDefaults(ctx context.Context) error {
 	}
 
 	for _, flag := range defaults {
-		existing, err := s.repo.GetFlag(ctx, flag.Key)
-		if err == nil {
-			flag.CreatedAt = existing.CreatedAt
+		if _, err := s.repo.GetFlag(ctx, flag.Key); err == nil {
+			continue
+		} else if !errors.Is(err, ErrNotFound) {
+			return fmt.Errorf("get feature flag %q: %w", flag.Key, err)
 		}
 
 		if err := s.repo.UpsertFlag(ctx, flag); err != nil {
@@ -87,19 +91,28 @@ func (s *Service) CreateFlag(ctx context.Context, in CreateFlagInput) (Flag, err
 	if key == "" {
 		return Flag{}, ErrInvalidInput
 	}
+	if in.RolloutPercentage < 0 || in.RolloutPercentage > 100 {
+		return Flag{}, ErrInvalidInput
+	}
 
 	now := time.Now().UTC()
 
 	flag := Flag{
-		Key:         key,
-		Description: description,
-		Enabled:     in.Enabled,
-		PlanCodes:   normalizePlanCodes(in.PlanCodes),
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		Key:               key,
+		Description:       description,
+		Enabled:           in.Enabled,
+		PlanCodes:         normalizePlanCodes(in.PlanCodes),
+		RolloutPercentage: normalizeRolloutPercentage(in.RolloutPercentage),
+		CohortUserIDs:     normalizeValues(in.CohortUserIDs),
+		ExpiresAt:         normalizeExpiry(in.ExpiresAt),
+		CreatedAt:         now,
+		UpdatedAt:         now,
 	}
 	if err := s.repo.CreateFlag(ctx, flag); err != nil {
 		return Flag{}, fmt.Errorf("create feature flag: %w", err)
+	}
+	if err := s.appendHistory(ctx, flag, "created", in.ActorUserID, ""); err != nil {
+		return Flag{}, err
 	}
 
 	return flag, nil
@@ -128,10 +141,25 @@ func (s *Service) UpdateFlag(ctx context.Context, key string, in UpdateFlagInput
 	if in.PlanCodes != nil {
 		flag.PlanCodes = normalizePlanCodes(*in.PlanCodes)
 	}
+	if in.RolloutPercentage != nil {
+		if *in.RolloutPercentage < 1 || *in.RolloutPercentage > 100 {
+			return Flag{}, ErrInvalidInput
+		}
+		flag.RolloutPercentage = *in.RolloutPercentage
+	}
+	if in.CohortUserIDs != nil {
+		flag.CohortUserIDs = normalizeValues(*in.CohortUserIDs)
+	}
+	if in.ExpiresAt != nil {
+		flag.ExpiresAt = normalizeExpiry(*in.ExpiresAt)
+	}
 
 	flag.UpdatedAt = time.Now().UTC()
 	if err := s.repo.UpdateFlag(ctx, flag); err != nil {
 		return Flag{}, fmt.Errorf("update feature flag: %w", err)
+	}
+	if err := s.appendHistory(ctx, flag, "updated", in.UpdatedBy, ""); err != nil {
+		return Flag{}, err
 	}
 
 	return flag, nil
@@ -166,12 +194,23 @@ func (s *Service) SetOverride(ctx context.Context, in SetOverrideInput) (Overrid
 	if err != nil {
 		return Override{}, fmt.Errorf("load feature flag override: %w", err)
 	}
+	flag, err := s.repo.GetFlag(ctx, key)
+	if err != nil {
+		return Override{}, fmt.Errorf("load feature flag for history: %w", err)
+	}
+	if err := s.appendHistory(ctx, flag, "override_set", in.UpdatedBy, organizationID); err != nil {
+		return Override{}, err
+	}
 
 	return saved, nil
 }
 
 // Resolve returns effective flag values for a tenant and plan.
-func (s *Service) Resolve(ctx context.Context, organizationID, planCode string) (map[string]bool, error) {
+func (s *Service) Resolve(
+	ctx context.Context,
+	organizationID, planCode string,
+	userID ...string,
+) (map[string]bool, error) {
 	flags, err := s.repo.ListFlags(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list feature flags: %w", err)
@@ -198,26 +237,47 @@ func (s *Service) Resolve(ctx context.Context, organizationID, planCode string) 
 	}
 
 	out := make(map[string]bool, len(flags))
+	resolvedUserID := ""
+	if len(userID) > 0 {
+		resolvedUserID = strings.TrimSpace(userID[0])
+	}
 	for _, flag := range flags {
-		out[flag.Key] = resolveFlag(flag, planCode, overrideByKey[flag.Key])
+		out[flag.Key] = resolveFlag(flag, organizationID, planCode, resolvedUserID, overrideByKey[flag.Key])
 	}
 
 	return out, nil
 }
 
-func resolveFlag(flag Flag, planCode string, override Override) bool {
+func resolveFlag(flag Flag, organizationID, planCode, userID string, override Override) bool {
 	if override.OrganizationID != "" {
 		return override.Enabled
 	}
 
-	enabled := flag.Enabled
+	if !flag.Enabled {
+		return false
+	}
+	if flag.ExpiresAt != nil && !time.Now().UTC().Before(*flag.ExpiresAt) {
+		return false
+	}
 	if len(flag.PlanCodes) > 0 {
 		if !slices.Contains(flag.PlanCodes, planCode) {
 			return false
 		}
 	}
 
-	return enabled
+	if userID != "" && slices.Contains(flag.CohortUserIDs, userID) {
+		return true
+	}
+
+	percentage := normalizeRolloutPercentage(flag.RolloutPercentage)
+	if percentage >= 100 {
+		return true
+	}
+
+	hasher := fnv.New32a()
+	_, _ = hasher.Write([]byte(flag.Key + ":" + organizationID))
+
+	return int(hasher.Sum32()%100) < percentage
 }
 
 func normalizePlanCodes(codes []string) []string {
@@ -238,4 +298,66 @@ func normalizePlanCodes(codes []string) []string {
 	}
 
 	return out
+}
+
+func normalizeRolloutPercentage(value int) int {
+	if value == 0 {
+		return 100
+	}
+	return value
+}
+
+func normalizeValues(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" && !slices.Contains(out, value) {
+			out = append(out, value)
+		}
+	}
+	return out
+}
+
+func normalizeExpiry(value *time.Time) *time.Time {
+	if value == nil {
+		return nil
+	}
+	normalized := value.UTC()
+	return &normalized
+}
+
+func (s *Service) appendHistory(
+	ctx context.Context,
+	flag Flag,
+	action, actorUserID, organizationID string,
+) error {
+	history := History{
+		ID:             uuid.NewString(),
+		Key:            flag.Key,
+		Action:         action,
+		ActorUserID:    strings.TrimSpace(actorUserID),
+		OrganizationID: organizationID,
+		Snapshot:       flag,
+		CreatedAt:      time.Now().UTC(),
+	}
+	if err := s.repo.AppendHistory(ctx, history); err != nil {
+		return fmt.Errorf("append feature flag history: %w", err)
+	}
+	return nil
+}
+
+// ListHistory returns the newest rollout mutations for a flag.
+func (s *Service) ListHistory(ctx context.Context, key string, limit int64) ([]History, error) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return nil, ErrInvalidInput
+	}
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	items, err := s.repo.ListHistory(ctx, key, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list feature flag history: %w", err)
+	}
+	return items, nil
 }

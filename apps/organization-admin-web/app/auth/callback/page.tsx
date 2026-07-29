@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { getClient } from "@/lib/api";
 import { saveSession } from "@/lib/session";
 
 export default function AuthCallbackPage() {
@@ -19,9 +20,26 @@ export default function AuthCallbackPage() {
       return;
     }
 
-    saveSession(accessToken, refreshToken);
+    // Strip tokens from the URL immediately so they cannot leak via history,
+    // referrer, or screenshots while validation runs.
     window.history.replaceState(null, "", "/auth/callback");
-    router.replace("/dashboard");
+
+    void (async () => {
+      try {
+        const client = getClient();
+
+        // Persist nothing until the API confirms the handed-over token.
+        await client.meWithToken(accessToken);
+
+        // Exchange the refresh token for the HttpOnly cookie session.
+        await client.refresh(refreshToken);
+
+        saveSession();
+        router.replace("/dashboard");
+      } catch {
+        setError("This sign-in link is invalid or expired. Please sign in again.");
+      }
+    })();
   }, [router]);
 
   return (

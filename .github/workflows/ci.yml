@@ -39,6 +39,61 @@ jobs:
           name: go-coverage
           path: coverage.out
 
+  dependency-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.x"
+      - name: Run govulncheck
+        # Blocking: a known-vulnerable dependency fails the build. New
+        # projects may surface findings that need triage — fix or document a
+        # justification in the PR rather than silencing the job.
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install
+      - name: Audit frontend dependencies
+        # Non-blocking for now: advisories are triaged asynchronously. Flip to
+        # blocking once the current backlog is clean.
+        continue-on-error: true
+        run: pnpm audit --prod
+
+  migrations:
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:7.0
+        env:
+          MONGO_INITDB_ROOT_USERNAME: launchpad
+          MONGO_INITDB_ROOT_PASSWORD: launchpad
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval db.adminCommand('ping')"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.x"
+      - name: Apply MongoDB indexes
+        run: go run ./scripts/migrate_indexes
+        env:
+          JWT_SECRET: ci-test-secret
+          MONGODB_URI: mongodb://launchpad:launchpad@localhost:27017/launchpad?authSource=admin
+          MONGODB_DATABASE: launchpad
+      - name: Build API
+        run: go build ./apps/api/...
+
   frontend:
     runs-on: ubuntu-latest
     steps:
@@ -49,6 +104,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install
+      - run: pnpm test
       - run: pnpm --filter @launchpad/platform-admin-web build
       - run: pnpm --filter @launchpad/organization-admin-web build
       - run: pnpm --filter @launchpad/employee-web build

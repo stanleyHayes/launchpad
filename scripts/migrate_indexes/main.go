@@ -8,20 +8,7 @@ import (
 	"os"
 	"time"
 
-	assignmentsmongo "launchpad/internal/assignments/mongo"
-	auditmongo "launchpad/internal/audit/mongo"
-	authmongo "launchpad/internal/auth/mongo"
-	billingmongo "launchpad/internal/billing/mongo"
-	cmsmongo "launchpad/internal/cms/mongo"
-	departmentsmongo "launchpad/internal/departments/mongo"
-	employeesmongo "launchpad/internal/employees/mongo"
-	featureflagsmongo "launchpad/internal/featureflags/mongo"
-	journeysmongo "launchpad/internal/journeys/mongo"
-	leadsmongo "launchpad/internal/leads/mongo"
-	notificationsmongo "launchpad/internal/notifications/mongo"
-	organizationsmongo "launchpad/internal/organizations/mongo"
-	platformmongo "launchpad/internal/platform/mongo"
-	supportmongo "launchpad/internal/support/mongo"
+	"launchpad/internal/app"
 	"launchpad/pkg/config"
 	"launchpad/pkg/logging"
 	mongox "launchpad/pkg/mongo"
@@ -57,30 +44,9 @@ func run() error {
 		}
 	}()
 
-	db := mongoDB.DB()
-	indexers := []struct {
-		name string
-		fn   func(context.Context) error
-	}{
-		{name: "audit", fn: auditmongo.NewStore(db).EnsureIndexes},
-		{name: "organization", fn: organizationsmongo.NewStore(db).EnsureIndexes},
-		{name: "user", fn: authmongo.NewUserStore(db).EnsureIndexes},
-		{name: "department", fn: departmentsmongo.NewStore(db).EnsureIndexes},
-		{name: "employee", fn: employeesmongo.NewStore(db).EnsureIndexes},
-		{name: "journey", fn: journeysmongo.NewStore(db).EnsureIndexes},
-		{name: "assignment", fn: assignmentsmongo.NewStore(db).EnsureIndexes},
-		{name: "notification", fn: notificationsmongo.NewStore(db).EnsureIndexes},
-		{name: "platform", fn: platformmongo.NewStore(db).EnsureIndexes},
-		{name: "leads", fn: leadsmongo.NewStore(db).EnsureIndexes},
-		{name: "featureflags", fn: featureflagsmongo.NewStore(db).EnsureIndexes},
-		{name: "billing", fn: billingmongo.NewStore(db).EnsureIndexes},
-		{name: "support", fn: supportmongo.NewStore(db).EnsureIndexes},
-		{name: "cms", fn: cmsmongo.NewStore(db).EnsureIndexes},
-	}
-
-	for _, indexer := range indexers {
-		if err := indexer.fn(ctx); err != nil {
-			return fmt.Errorf("ensure %s indexes: %w", indexer.name, err)
+	for _, indexer := range app.MongoIndexers(mongoDB.DB()) {
+		if err := indexer.Ensure(ctx); err != nil {
+			return fmt.Errorf("ensure %s indexes: %w", indexer.Name, err)
 		}
 	}
 

@@ -5,9 +5,16 @@
   "scripts": {
     "dev:marketing": "pnpm --filter @launchpad/marketing-web dev",
     "build": "pnpm -r build",
-    "lint": "pnpm -r lint"
+    "lint": "pnpm -r lint",
+    "test": "vitest run",
+    "launch:check": "node scripts/check-launch-gates.mjs",
+    "smoke:anthropic": "node scripts/smoke-anthropic.mjs",
+    "smoke:oidc": "node scripts/smoke-oidc.mjs"
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4"
   }
 }

@@ -2,8 +2,11 @@ package auth
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"fmt"
+	"log/slog"
+	"sort"
 	"strings"
 	"time"
 
@@ -16,11 +19,16 @@ import (
 
 const fieldEmail = "email"
 
+// fieldSessionID is the me-response key carrying the auth session id (or,
+// under impersonation, the support session id).
+const fieldSessionID = "sessionId"
+
 // Config holds auth service settings.
 type Config struct {
 	JWTSecret      string
 	AccessTTL      time.Duration
 	RefreshTTL     time.Duration
+	InviteTTL      time.Duration
 	PasswordMinLen int
 }
 
@@ -31,38 +39,113 @@ type PlatformStaffReader interface {
 
 // Service implements authentication use cases.
 type Service struct {
-	users         UserRepository
-	orgs          *organizations.Service
-	audit         *audit.Service
-	sessions      SessionRepository
-	platformStaff PlatformStaffReader
-	cfg           Config
+	users          UserRepository
+	orgs           OrgDirectory
+	audit          *audit.Service
+	sessions       SessionRepository
+	invitations    InvitationStore
+	passwordResets PasswordResetStore
+	mfa            MFAStore
+	mfaTickets     MFATicketStore
+	platformStaff  PlatformStaffReader
+	permissions    PermissionResolver
+	mailer         MailSender
+	// inviteAcceptBaseURL and passwordResetBaseURL are the link bases emailed
+	// to users (the token is appended as ?token=...).
+	inviteAcceptBaseURL  string
+	passwordResetBaseURL string
+	cfg                  Config
+}
+
+// PermissionResolver resolves a role code to its effective permission set.
+// Satisfied by roles.Service; the auth package only reads through it.
+type PermissionResolver interface {
+	ResolvePermissions(ctx context.Context, organizationID, roleCode string) (map[string]struct{}, error)
+}
+
+// MailSender sends transactional email. Satisfied by email.Sender; the auth
+// package depends on the interface so tests can substitute a fake.
+type MailSender interface {
+	Send(ctx context.Context, to, subject, html string) error
 }
 
 // Result is returned after successful registration or login.
 type Result struct {
-	User         UserPublic                  `json:"user"`
-	Organization *organizations.Organization `json:"organization"`
-	Tokens       TokenPair                   `json:"tokens"`
+	User         UserPublic          `json:"user"`
+	Organization *OrganizationPublic `json:"organization"`
+	Tokens       TokenPair           `json:"tokens"`
+	// MFARequired and MFATicket are set INSTEAD of user/organization/tokens
+	// when the account has MFA enabled: the password was valid but the second
+	// factor is still owed. The single-use ticket is exchanged via
+	// CompleteMFALogin (POST /auth/login/mfa).
+	MFARequired bool   `json:"mfaRequired,omitempty"`
+	MFATicket   string `json:"mfaTicket,omitempty"`
 }
 
 // NewService constructs an auth Service.
 func NewService(
 	users UserRepository,
-	orgs *organizations.Service,
+	orgs OrgDirectory,
 	auditSvc *audit.Service,
 	sessions SessionRepository,
+	invitations InvitationStore,
 	cfg Config,
 	platformStaff PlatformStaffReader,
 ) *Service {
 	return &Service{
-		users:         users,
-		orgs:          orgs,
-		audit:         auditSvc,
-		sessions:      sessions,
-		platformStaff: platformStaff,
-		cfg:           cfg,
+		users:                users,
+		orgs:                 orgs,
+		audit:                auditSvc,
+		sessions:             sessions,
+		invitations:          invitations,
+		passwordResets:       nil,
+		mfa:                  nil,
+		mfaTickets:           nil,
+		platformStaff:        platformStaff,
+		permissions:          nil,
+		mailer:               nil,
+		inviteAcceptBaseURL:  "",
+		passwordResetBaseURL: "",
+		cfg:                  cfg,
 	}
+}
+
+// WithPermissionResolver attaches the RBAC resolver so Me can report the
+// caller's effective permissions. Chainable; nil-safe (Me omits permissions).
+func (s *Service) WithPermissionResolver(resolver PermissionResolver) *Service {
+	s.permissions = resolver
+
+	return s
+}
+
+// WithPasswordResets attaches the password-reset token store. Chainable;
+// without it the password-reset use cases refuse to run.
+func (s *Service) WithPasswordResets(resets PasswordResetStore) *Service {
+	s.passwordResets = resets
+
+	return s
+}
+
+// WithMFA attaches the MFA enrollment and login-ticket stores. Chainable;
+// without them the MFA use cases refuse to run and logins never challenge
+// for a second factor.
+func (s *Service) WithMFA(mfa MFAStore, tickets MFATicketStore) *Service {
+	s.mfa = mfa
+	s.mfaTickets = tickets
+
+	return s
+}
+
+// WithMailer attaches the transactional mail sender and the base URLs used to
+// build invitation-accept and password-reset links. Chainable; nil-safe —
+// without a mailer no email is sent and tokens keep being returned in API
+// responses only.
+func (s *Service) WithMailer(mailer MailSender, inviteAcceptBaseURL, passwordResetBaseURL string) *Service {
+	s.mailer = mailer
+	s.inviteAcceptBaseURL = strings.TrimRight(inviteAcceptBaseURL, "/")
+	s.passwordResetBaseURL = strings.TrimRight(passwordResetBaseURL, "/")
+
+	return s
 }
 
 // Register creates a user, organization, and session.
@@ -72,14 +155,26 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (Result, error
 		return Result{}, err
 	}
 
-	user, err := s.createUser(ctx, email, displayName, in.Password)
+	// Reject taken emails up front so a failed attempt burns neither the
+	// email nor the organization slug.
+	if _, err := s.users.GetByEmail(ctx, email); err == nil {
+		return Result{}, ErrEmailTaken
+	}
+
+	user, err := s.buildUser(email, displayName, in.Password)
 	if err != nil {
 		return Result{}, err
 	}
 
+	// The organization is created before the user: an org-creation failure
+	// must not leave an orphan user whose email then blocks re-registration.
 	org, err := s.createOrganization(ctx, in, organizationName, user.ID)
 	if err != nil {
 		return Result{}, err
+	}
+
+	if err := s.users.Create(ctx, user); err != nil {
+		return Result{}, fmt.Errorf("create user: %w", err)
 	}
 
 	if err := s.recordRegistration(ctx, user, org); err != nil {
@@ -91,7 +186,7 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (Result, error
 		return Result{}, fmt.Errorf("issue registration tokens: %w", err)
 	}
 
-	return Result{User: toPublic(user), Organization: &org, Tokens: tokens}, nil
+	return Result{User: toPublic(user), Organization: toOrganizationPublicPtr(org), Tokens: tokens}, nil
 }
 
 // Login authenticates a user and returns tokens.
@@ -100,10 +195,14 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (Result, error) {
 
 	user, err := s.users.GetByEmail(ctx, email)
 	if err != nil {
+		s.recordLoginFailure(ctx, "", email)
+
 		return Result{}, ErrInvalidCredentials
 	}
 
 	if !security.CheckPassword(user.PasswordHash, in.Password) {
+		s.recordLoginFailure(ctx, user.ID, email)
+
 		return Result{}, ErrInvalidCredentials
 	}
 
@@ -119,8 +218,19 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (Result, error) {
 	}
 
 	org, err := s.orgs.Get(ctx, orgID)
-	if err != nil {
+	if err != nil || !organizationAllowsLogin(org.Status) {
+		s.recordLoginFailure(ctx, user.ID, email)
+
 		return Result{}, ErrInvalidCredentials
+	}
+
+	mfaRequired, err := s.mfaRequiredFor(ctx, orgID, user.ID)
+	if err != nil {
+		return Result{}, err
+	}
+
+	if mfaRequired {
+		return s.challengeMFA(ctx, user, orgID, roleCode)
 	}
 
 	if err := s.audit.Record(ctx, &orgID, user.ID, "auth.login", "user", user.ID, nil); err != nil {
@@ -132,7 +242,46 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (Result, error) {
 		return Result{}, fmt.Errorf("issue login tokens: %w", err)
 	}
 
-	return Result{User: toPublic(user), Organization: &org, Tokens: tokens}, nil
+	return Result{User: toPublic(user), Organization: toOrganizationPublicPtr(org), Tokens: tokens}, nil
+}
+
+// FederatedLogin issues a session for an already-provisioned user who has been
+// authenticated by an external identity provider (SSO). Unlike Login it takes
+// no password; the user must already exist and be an active member of the
+// organization (e.g. provisioned via SCIM or invited).
+func (s *Service) FederatedLogin(ctx context.Context, email, organizationID string) (Result, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+
+	organizationID = strings.TrimSpace(organizationID)
+	if email == "" || organizationID == "" {
+		return Result{}, ErrInvalidInput
+	}
+
+	user, err := s.users.GetByEmail(ctx, email)
+	if err != nil {
+		return Result{}, ErrNotProvisioned
+	}
+
+	membership, err := s.orgs.Membership(ctx, organizationID, user.ID)
+	if err != nil {
+		return Result{}, ErrNotProvisioned
+	}
+
+	org, err := s.orgs.Get(ctx, organizationID)
+	if err != nil || !organizationAllowsLogin(org.Status) {
+		return Result{}, ErrNotProvisioned
+	}
+
+	if err := s.audit.Record(ctx, &organizationID, user.ID, "auth.sso_login", "user", user.ID, nil); err != nil {
+		return Result{}, fmt.Errorf("%w: %w", ErrAuditFailed, err)
+	}
+
+	tokens, err := s.issueTokens(ctx, user, org.ID, membership.RoleCode)
+	if err != nil {
+		return Result{}, fmt.Errorf("issue sso tokens: %w", err)
+	}
+
+	return Result{User: toPublic(user), Organization: toOrganizationPublicPtr(org), Tokens: tokens}, nil
 }
 
 // Refresh rotates tokens for a valid refresh session.
@@ -142,7 +291,7 @@ func (s *Service) Refresh(ctx context.Context, sessionID, refreshToken string) (
 		return TokenPair{}, ErrSessionInvalid
 	}
 
-	if security.HashToken(refreshToken) != storedHash {
+	if subtle.ConstantTimeCompare([]byte(security.HashToken(refreshToken)), []byte(storedHash)) != 1 {
 		if delErr := s.sessions.Delete(ctx, sessionID); delErr != nil {
 			return TokenPair{}, fmt.Errorf("%w: revoke session: %w", ErrSessionInvalid, delErr)
 		}
@@ -172,6 +321,11 @@ func (s *Service) Refresh(ctx context.Context, sessionID, refreshToken string) (
 			return TokenPair{}, ErrSessionInvalid
 		}
 
+		org, orgErr := s.orgs.Get(ctx, orgID)
+		if orgErr != nil || !organizationAllowsLogin(org.Status) {
+			return TokenPair{}, ErrSessionInvalid
+		}
+
 		roleCode = membership.RoleCode
 	}
 
@@ -182,6 +336,10 @@ func (s *Service) Refresh(ctx context.Context, sessionID, refreshToken string) (
 	return s.issueTokens(ctx, user, orgID, roleCode)
 }
 
+func organizationAllowsLogin(status string) bool {
+	return status == organizations.StatusActive() || status == organizations.StatusTrial()
+}
+
 // Logout revokes the current session.
 func (s *Service) Logout(ctx context.Context, sessionID string) error {
 	if err := s.sessions.Delete(ctx, sessionID); err != nil {
@@ -189,6 +347,65 @@ func (s *Service) Logout(ctx context.Context, sessionID string) error {
 	}
 
 	return nil
+}
+
+// ListOrganizations returns the caller's active tenant memberships with
+// display metadata for the workspace switcher.
+func (s *Service) ListOrganizations(ctx context.Context, userID string) ([]OrganizationChoice, error) {
+	memberships, err := s.orgs.ListMembershipsForUser(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list memberships: %w", err)
+	}
+	out := make([]OrganizationChoice, 0, len(memberships))
+	for _, membership := range memberships {
+		org, getErr := s.orgs.Get(ctx, membership.OrganizationID)
+		if getErr != nil || !organizationAllowsLogin(org.Status) {
+			continue
+		}
+		out = append(out, OrganizationChoice{
+			Organization: toOrganizationPublic(org),
+			RoleCode:     membership.RoleCode,
+		})
+	}
+	return out, nil
+}
+
+// SwitchOrganization replaces the caller's current session with one scoped
+// to another active membership. It never accepts a role from the client.
+func (s *Service) SwitchOrganization(
+	ctx context.Context,
+	principal security.Principal,
+	organizationID string,
+) (Result, error) {
+	organizationID = strings.TrimSpace(organizationID)
+	if principal.UserID == "" || principal.SessionID == "" || organizationID == "" || principal.Impersonator {
+		return Result{}, ErrInvalidInput
+	}
+	membership, err := s.orgs.Membership(ctx, organizationID, principal.UserID)
+	if err != nil {
+		return Result{}, ErrInvalidCredentials
+	}
+	org, err := s.orgs.Get(ctx, organizationID)
+	if err != nil || !organizationAllowsLogin(org.Status) {
+		return Result{}, ErrInvalidCredentials
+	}
+	user, err := s.users.GetByID(ctx, principal.UserID)
+	if err != nil {
+		return Result{}, ErrInvalidCredentials
+	}
+	if err := s.audit.Record(ctx, &organizationID, user.ID, "auth.organization_switched", "organization", organizationID, map[string]any{
+		"fromOrganizationId": principal.OrganizationID,
+	}); err != nil {
+		return Result{}, fmt.Errorf("%w: %w", ErrAuditFailed, err)
+	}
+	if err := s.sessions.Delete(ctx, principal.SessionID); err != nil {
+		return Result{}, fmt.Errorf("revoke previous session: %w", err)
+	}
+	tokens, err := s.issueTokens(ctx, user, org.ID, membership.RoleCode)
+	if err != nil {
+		return Result{}, fmt.Errorf("issue switched session: %w", err)
+	}
+	return Result{User: toPublic(user), Organization: toOrganizationPublicPtr(org), Tokens: tokens}, nil
 }
 
 // Me returns the authenticated profile.
@@ -203,7 +420,8 @@ func (s *Service) Me(ctx context.Context, principal security.Principal) (map[str
 			"user":         toPublic(user),
 			"organization": nil,
 			"roleCode":     principal.RoleCode,
-			"sessionId":    principal.SessionID,
+			fieldSessionID: principal.SessionID,
+			"mfaEnabled":   user.MFAEnabled,
 		}, nil
 	}
 
@@ -212,12 +430,26 @@ func (s *Service) Me(ctx context.Context, principal security.Principal) (map[str
 		return nil, fmt.Errorf("load organization: %w", err)
 	}
 
-	return map[string]any{
+	profile := map[string]any{
 		"user":         toPublic(user),
-		"organization": org,
+		"organization": toOrganizationPublic(org),
 		"roleCode":     principal.RoleCode,
-		"sessionId":    principal.SessionID,
-	}, nil
+		fieldSessionID: principal.SessionID,
+		"mfaEnabled":   user.MFAEnabled,
+		"permissions":  s.resolvePermissions(ctx, principal),
+	}
+
+	// Requests running under a platform support impersonation token expose the
+	// session context so the tenant portal can banner the support access
+	// (PRD 5.2.2). The key is absent on ordinary sessions.
+	if principal.Impersonator {
+		profile["impersonation"] = map[string]any{
+			fieldSessionID: principal.ImpersonationSessionID,
+			"agentUserId":  principal.UserID,
+		}
+	}
+
+	return profile, nil
 }
 
 // GetUserByEmail loads a user by email for bootstrap and admin flows.
@@ -263,20 +495,9 @@ func (s *Service) validateRegistration(in RegisterInput) (string, string, string
 }
 
 func (s *Service) createUser(ctx context.Context, email, displayName, password string) (User, error) {
-	hash, err := security.HashPassword(password)
+	user, err := s.buildUser(email, displayName, password)
 	if err != nil {
-		return User{}, fmt.Errorf("hash password: %w", err)
-	}
-
-	now := time.Now().UTC()
-	user := User{
-		ID:           uuid.NewString(),
-		Email:        email,
-		DisplayName:  displayName,
-		PasswordHash: hash,
-		Status:       userStatusActive,
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		return User{}, err
 	}
 
 	if err := s.users.Create(ctx, user); err != nil {
@@ -284,6 +505,26 @@ func (s *Service) createUser(ctx context.Context, email, displayName, password s
 	}
 
 	return user, nil
+}
+
+// buildUser constructs (but does not persist) an active user account.
+func (s *Service) buildUser(email, displayName, password string) (User, error) {
+	hash, err := security.HashPassword(password)
+	if err != nil {
+		return User{}, fmt.Errorf("hash password: %w", err)
+	}
+
+	now := time.Now().UTC()
+
+	return User{
+		ID:           uuid.NewString(),
+		Email:        email,
+		DisplayName:  displayName,
+		PasswordHash: hash,
+		Status:       userStatusActive,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}, nil
 }
 
 func (s *Service) createOrganization(
@@ -335,6 +576,12 @@ func (s *Service) resolveLoginMembership(
 			return "", "", ErrInvalidCredentials
 		}
 
+		// Pick deterministically when the user belongs to several
+		// organizations; membership list order is storage-dependent.
+		sort.Slice(memberships, func(i, j int) bool {
+			return memberships[i].OrganizationID < memberships[j].OrganizationID
+		})
+
 		return memberships[0].OrganizationID, memberships[0].RoleCode, nil
 	}
 
@@ -360,6 +607,18 @@ func (s *Service) loginAsPlatformStaff(ctx context.Context, user User) (Result, 
 		return Result{}, fmt.Errorf("load platform staff: %w", err)
 	}
 
+	// Platform staff are not hard-locked when MFA is not enrolled (they get a
+	// setup prompt in settings instead); an ENABLED enrollment always
+	// challenges.
+	mfaRequired, err := s.mfaRequiredFor(ctx, "", user.ID)
+	if err != nil {
+		return Result{}, err
+	}
+
+	if mfaRequired {
+		return s.challengeMFA(ctx, user, "", roleCode)
+	}
+
 	if err := s.audit.Record(ctx, nil, user.ID, "auth.login", "user", user.ID, nil); err != nil {
 		return Result{}, fmt.Errorf("%w: %w", ErrAuditFailed, err)
 	}
@@ -370,6 +629,21 @@ func (s *Service) loginAsPlatformStaff(ctx context.Context, user User) (Result, 
 	}
 
 	return Result{User: toPublic(user), Organization: nil, Tokens: tokens}, nil
+}
+
+// recordLoginFailure audits a rejected login attempt so credential-guessing
+// shows up in the audit log. The actor is the matched account when known (""
+// when the email is not registered). The write is best-effort: a broken audit
+// store must never change the generic invalid-credentials response.
+func (s *Service) recordLoginFailure(ctx context.Context, userID, email string) {
+	err := s.audit.RecordResult(
+		ctx, nil, userID, "auth.login", "user", userID,
+		audit.ResultFailure, "invalid_credentials",
+		map[string]any{fieldEmail: email},
+	)
+	if err != nil {
+		slog.WarnContext(ctx, "audit failed login attempt", "error", err)
+	}
 }
 
 func (s *Service) issueTokens(ctx context.Context, user User, orgID, roleCode string) (TokenPair, error) {
@@ -411,4 +685,43 @@ func ParseRefreshToken(combined string) (string, string, error) {
 	}
 
 	return parts[0], parts[1], nil
+}
+
+// resolvePermissions returns the caller's effective permission list, sorted
+// for a stable response. Resolution failures degrade to an empty list rather
+// than failing the profile read. Support impersonation principals bypass the
+// resolver and hold exactly the fixed read-only set, matching the
+// authorization middleware.
+func (s *Service) resolvePermissions(ctx context.Context, principal security.Principal) []string {
+	if principal.Impersonator {
+		set := security.ImpersonatorPermissions()
+		permissions := make([]string, 0, len(set))
+		for permission := range set {
+			permissions = append(permissions, permission)
+		}
+
+		sort.Strings(permissions)
+
+		return permissions
+	}
+
+	if s.permissions == nil {
+		return []string{}
+	}
+
+	set, err := s.permissions.ResolvePermissions(ctx, principal.OrganizationID, principal.RoleCode)
+	if err != nil {
+		slog.ErrorContext(ctx, "resolve permissions for me", "error", err)
+
+		return []string{}
+	}
+
+	permissions := make([]string, 0, len(set))
+	for permission := range set {
+		permissions = append(permissions, permission)
+	}
+
+	sort.Strings(permissions)
+
+	return permissions
 }

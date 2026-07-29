@@ -80,16 +80,35 @@ func (m *memoryRepo) GetAssignment(
 	return item, nil
 }
 
-func (m *memoryRepo) ListAssignments(context.Context, string) ([]assignments.JourneyAssignment, error) {
-	return nil, nil
+func (m *memoryRepo) ListAssignments(
+	_ context.Context,
+	organizationID string,
+) ([]assignments.JourneyAssignment, error) {
+	items := make([]assignments.JourneyAssignment, 0)
+
+	for _, assignment := range m.assignments {
+		if assignment.OrganizationID == organizationID {
+			items = append(items, assignment)
+		}
+	}
+
+	return items, nil
 }
 
 func (m *memoryRepo) ListAssignmentsForEmployee(
-	context.Context,
-	string,
-	string,
+	_ context.Context,
+	organizationID,
+	employeeID string,
 ) ([]assignments.JourneyAssignment, error) {
-	return nil, nil
+	items := make([]assignments.JourneyAssignment, 0)
+
+	for _, assignment := range m.assignments {
+		if assignment.OrganizationID == organizationID && assignment.EmployeeID == employeeID {
+			items = append(items, assignment)
+		}
+	}
+
+	return items, nil
 }
 
 func (m *memoryRepo) UpdateAssignment(_ context.Context, assignment assignments.JourneyAssignment) error {
@@ -100,13 +119,13 @@ func (m *memoryRepo) UpdateAssignment(_ context.Context, assignment assignments.
 
 func (m *memoryRepo) ListSteps(
 	_ context.Context,
-	_,
+	organizationID,
 	journeyAssignmentID string,
 ) ([]assignments.StepAssignment, error) {
 	items := make([]assignments.StepAssignment, 0)
 
 	for _, step := range m.steps {
-		if step.JourneyAssignmentID == journeyAssignmentID {
+		if step.OrganizationID == organizationID && step.JourneyAssignmentID == journeyAssignmentID {
 			items = append(items, step)
 		}
 	}
@@ -129,6 +148,41 @@ func (m *memoryRepo) UpdateStep(_ context.Context, step assignments.StepAssignme
 	return nil
 }
 
+func (m *memoryRepo) ListDueSoonSteps(
+	_ context.Context,
+	from, to time.Time,
+) ([]assignments.StepAssignment, error) {
+	items := make([]assignments.StepAssignment, 0)
+
+	for _, step := range m.steps {
+		if step.Status == "completed" || step.DueAt == nil || step.DueSoonNotifiedAt != nil {
+			continue
+		}
+
+		if step.DueAt.After(from) && !step.DueAt.After(to) {
+			items = append(items, step)
+		}
+	}
+
+	return items, nil
+}
+
+func (m *memoryRepo) ListOverdueSteps(_ context.Context, now time.Time) ([]assignments.StepAssignment, error) {
+	items := make([]assignments.StepAssignment, 0)
+
+	for _, step := range m.steps {
+		if step.Status == "completed" || step.DueAt == nil || step.OverdueNotifiedAt != nil {
+			continue
+		}
+
+		if step.DueAt.Before(now) {
+			items = append(items, step)
+		}
+	}
+
+	return items, nil
+}
+
 func (m *memoryRepo) GetApproval(_ context.Context, _, approvalID string) (assignments.Approval, error) {
 	item, ok := m.approvals[approvalID]
 	if !ok {
@@ -138,10 +192,12 @@ func (m *memoryRepo) GetApproval(_ context.Context, _, approvalID string) (assig
 	return item, nil
 }
 
-func (m *memoryRepo) ListApprovals(context.Context, string) ([]assignments.Approval, error) {
+func (m *memoryRepo) ListApprovals(_ context.Context, organizationID string) ([]assignments.Approval, error) {
 	items := make([]assignments.Approval, 0, len(m.approvals))
 	for _, approval := range m.approvals {
-		items = append(items, approval)
+		if approval.OrganizationID == organizationID {
+			items = append(items, approval)
+		}
 	}
 
 	return items, nil
@@ -167,14 +223,17 @@ func (m *memoryRepo) UpdateApproval(_ context.Context, approval assignments.Appr
 	return nil
 }
 
-type stubJourneys struct{}
-
-func (stubJourneys) RequirePublished(context.Context, string, string) (journeys.Template, error) {
-	return journeys.Template{}, nil
+type stubJourneys struct {
+	template journeys.Template
+	steps    []journeys.Step
 }
 
-func (stubJourneys) ListStepsForVersion(context.Context, string, string, int) ([]journeys.Step, error) {
-	return nil, nil
+func (s stubJourneys) RequirePublished(context.Context, string, string) (journeys.Template, error) {
+	return s.template, nil
+}
+
+func (s stubJourneys) ListStepsForVersion(context.Context, string, string, int) ([]journeys.Step, error) {
+	return s.steps, nil
 }
 
 type stubEmployees struct {
@@ -198,6 +257,21 @@ func (s stubEmployees) GetByUserID(_ context.Context, _, userID string) (employe
 	}
 
 	return item, nil
+}
+
+func (s stubEmployees) List(_ context.Context, _ string, offset, limit int64) ([]employees.Employee, error) {
+	all := make([]employees.Employee, 0, len(s.byID))
+	for _, employee := range s.byID {
+		all = append(all, employee)
+	}
+
+	if offset >= int64(len(all)) {
+		return nil, nil
+	}
+
+	end := min(offset+limit, int64(len(all)))
+
+	return all[offset:end], nil
 }
 
 type stubNotify struct {
@@ -345,11 +419,82 @@ func TestDecideApprovalNotifiesEmployee(t *testing.T) {
 		t.Fatalf("DecideApproval: %v", err)
 	}
 
-	if len(notify.calls) != 1 || notify.calls[0].UserID != testEmployeeUser {
-		t.Fatalf("expected employee notification, got %+v", notify.calls)
+	// Approving the final step completes the journey, so the employee gets
+	// both the journey-completed and the step-approved notifications.
+	var approved *notifications.CreateInput
+
+	for i := range notify.calls {
+		if notify.calls[i].Title == "Step approved" {
+			approved = &notify.calls[i]
+		}
 	}
 
-	if notify.calls[0].Title != "Step approved" {
-		t.Fatalf("title = %q, want Step approved", notify.calls[0].Title)
+	if approved == nil || approved.UserID != testEmployeeUser {
+		t.Fatalf("expected employee step-approved notification, got %+v", notify.calls)
+	}
+}
+
+func (m *memoryRepo) DeleteForOrganization(context.Context, string) (int64, error) {
+	return 0, nil
+}
+
+func TestOverrideStepRequiresReasonAndCompletesAssignment(t *testing.T) {
+	t.Parallel()
+
+	repo := newMemoryRepo()
+	svc := assignments.NewService(repo, stubJourneys{}, stubEmployees{}, &stubNotify{})
+	repo.assignments[testAssignmentID] = assignments.JourneyAssignment{
+		ID: testAssignmentID, OrganizationID: testOrgID, EmployeeID: testEmployeeID, Status: testStatusInProgress,
+	}
+	repo.steps[testStepID] = assignments.StepAssignment{
+		ID: testStepID, OrganizationID: testOrgID, JourneyAssignmentID: testAssignmentID,
+		EmployeeID: testEmployeeID, Status: "blocked",
+	}
+
+	if _, err := svc.OverrideStep(context.Background(), testOrgID, testManagerUser, testStepID, assignments.OverrideStepInput{
+		Action: "complete",
+	}); err == nil {
+		t.Fatal("expected an override without a reason to fail")
+	}
+
+	step, err := svc.OverrideStep(context.Background(), testOrgID, testManagerUser, testStepID, assignments.OverrideStepInput{
+		Action: "complete", Reason: "Verified outside the system",
+	})
+	if err != nil {
+		t.Fatalf("OverrideStep: %v", err)
+	}
+	if step.Status != "completed" || step.OverrideByUserID != testManagerUser || step.OverriddenAt == nil {
+		t.Fatalf("override metadata/status = %+v", step)
+	}
+	if repo.assignments[testAssignmentID].Status != "completed" {
+		t.Fatalf("assignment status = %s, want completed", repo.assignments[testAssignmentID].Status)
+	}
+}
+
+func TestListStepsForActorAppliesLocaleTranslation(t *testing.T) {
+	t.Parallel()
+
+	repo := newMemoryRepo()
+	svc := assignments.NewService(repo, stubJourneys{}, stubEmployees{}, &stubNotify{})
+	repo.assignments[testAssignmentID] = assignments.JourneyAssignment{
+		ID: testAssignmentID, OrganizationID: testOrgID, EmployeeID: testEmployeeID,
+	}
+	repo.steps[testStepID] = assignments.StepAssignment{
+		ID: testStepID, OrganizationID: testOrgID, JourneyAssignmentID: testAssignmentID,
+		Title: "Welcome", Instructions: "Read this", Config: map[string]any{
+			"translations": map[string]any{
+				"fr": map[string]any{"title": "Bienvenue", "instructions": "Lisez ceci"},
+			},
+		},
+	}
+
+	steps, err := svc.ListStepsForActor(
+		context.Background(), testOrgID, testManagerUser, true, testAssignmentID, "fr-CA",
+	)
+	if err != nil {
+		t.Fatalf("ListStepsForActor: %v", err)
+	}
+	if len(steps) != 1 || steps[0].Title != "Bienvenue" || steps[0].Instructions != "Lisez ceci" {
+		t.Fatalf("translated steps = %+v", steps)
 	}
 }

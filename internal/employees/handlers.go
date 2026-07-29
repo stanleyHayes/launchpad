@@ -1,48 +1,34 @@
 package employees
 
 import (
-	"context"
+	"encoding/csv"
 	"errors"
-	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"launchpad/internal/audit"
-	"launchpad/internal/organizations"
 	"launchpad/pkg/httpx"
 	"launchpad/pkg/security"
 )
 
+const maxEmployeeCSVBytes = 2 << 20
+
 // Handler exposes employee HTTP endpoints.
 type Handler struct {
-	svc      *Service
-	audit    *audit.Service
-	accounts AccountCreator
-	members  MemberAdder
+	svc         *Service
+	audit       *audit.Service
+	provisioner *Provisioner
 }
-
-// AccountCreator creates login accounts for employees.
-type AccountCreator interface {
-	CreateUserAccount(ctx context.Context, email, displayName, password string) (userID string, err error)
-}
-
-// MemberAdder adds organization memberships.
-type MemberAdder interface {
-	AddEmployeeMember(ctx context.Context, organizationID, userID string) error
-}
-
-var (
-	errProvisionAccount = errors.New("provision account failed")
-	errProvisionMember  = errors.New("provision member failed")
-)
 
 // NewHandler constructs a Handler.
 func NewHandler(svc *Service, auditSvc *audit.Service, accounts AccountCreator, members MemberAdder) *Handler {
-	return &Handler{svc: svc, audit: auditSvc, accounts: accounts, members: members}
+	return &Handler{svc: svc, audit: auditSvc, provisioner: NewProvisioner(svc, accounts, members)}
 }
 
 // HandleList lists employees for the current organization.
@@ -55,6 +41,7 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	limit := int64(0)
+	offset := int64(0)
 
 	if raw := r.URL.Query().Get("limit"); raw != "" {
 		parsed, err := strconv.ParseInt(raw, 10, 64)
@@ -67,7 +54,18 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 		limit = parsed
 	}
 
-	items, err := h.svc.List(r.Context(), principal.OrganizationID, limit)
+	if raw := r.URL.Query().Get("offset"); raw != "" {
+		parsed, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			writeError(w, r, http.StatusBadRequest, "INVALID_OFFSET", "offset must be an integer")
+
+			return
+		}
+
+		offset = parsed
+	}
+
+	items, err := h.svc.List(r.Context(), principal.OrganizationID, offset, limit)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "list employees failed", "error", err)
 		writeError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Unable to list employees")
@@ -78,17 +76,27 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, r, http.StatusOK, items)
 }
 
+func (h *Handler) HandleMyContacts(w http.ResponseWriter, r *http.Request) {
+	principal, ok := security.PrincipalFromContext(r.Context())
+	if !ok {
+		writeError(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+	contacts, err := h.svc.ContactsForUser(r.Context(), principal.OrganizationID, principal.UserID)
+	if err != nil {
+		writeEmployeeError(w, r, err)
+		return
+	}
+	writeJSON(w, r, http.StatusOK, contacts)
+}
+
 // HandleCreate creates an employee.
+// Authorization is enforced by the route-level RequirePermission
+// (employees.create); the handler only needs the authenticated principal.
 func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	principal, ok := security.PrincipalFromContext(r.Context())
 	if !ok {
 		writeError(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
-
-		return
-	}
-
-	if !organizations.CanManageOrganization(principal.RoleCode) {
-		writeError(w, r, http.StatusForbidden, "FORBIDDEN", "Insufficient permissions")
 
 		return
 	}
@@ -98,9 +106,13 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		FirstName         string `json:"firstName"`
 		LastName          string `json:"lastName"`
 		WorkEmail         string `json:"workEmail"`
+		MobilePhone       string `json:"mobilePhone"`
 		JobRoleID         string `json:"jobRoleId"`
 		DepartmentID      string `json:"departmentId"`
 		ManagerEmployeeID string `json:"managerEmployeeId"`
+		BuddyEmployeeID   string `json:"buddyEmployeeId"`
+		Team              string `json:"team"`
+		Location          string `json:"location"`
 		StartDate         string `json:"startDate"`
 	}
 	if err := httpx.DecodeJSON(r, &body); err != nil {
@@ -121,9 +133,13 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		FirstName:         body.FirstName,
 		LastName:          body.LastName,
 		WorkEmail:         body.WorkEmail,
+		MobilePhone:       body.MobilePhone,
 		JobRoleID:         body.JobRoleID,
 		DepartmentID:      body.DepartmentID,
 		ManagerEmployeeID: body.ManagerEmployeeID,
+		BuddyEmployeeID:   body.BuddyEmployeeID,
+		Team:              body.Team,
+		Location:          body.Location,
 		StartDate:         startDate,
 	})
 	if err != nil {
@@ -142,13 +158,102 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		employee.ID,
 		map[string]any{"workEmail": employee.WorkEmail},
 	); err != nil {
+		// The employee is already persisted; a failed audit write must not
+		// turn a committed change into a reported failure.
 		slog.ErrorContext(r.Context(), "audit employee create failed", "error", err)
-		writeError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Unable to record audit event")
-
-		return
 	}
 
 	writeJSON(w, r, http.StatusCreated, employee)
+}
+
+// HandleImportCSV imports employees from a header-based CSV. Valid rows are
+// committed independently and row errors are returned without rolling back
+// successful employees.
+func (h *Handler) HandleImportCSV(w http.ResponseWriter, r *http.Request) {
+	principal, ok := security.PrincipalFromContext(r.Context())
+	if !ok {
+		writeError(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxEmployeeCSVBytes)
+	reader := csv.NewReader(r.Body)
+	reader.FieldsPerRecord = -1
+	header, err := reader.Read()
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "INVALID_CSV", "CSV header is required")
+		return
+	}
+	columns := make(map[string]int, len(header))
+	for index, name := range header {
+		columns[strings.ToLower(strings.TrimSpace(name))] = index
+	}
+	for _, required := range []string{"firstname", "lastname", "workemail", "startdate"} {
+		if _, exists := columns[required]; !exists {
+			writeError(w, r, http.StatusBadRequest, "INVALID_CSV", "Required CSV columns: firstName,lastName,workEmail,startDate")
+			return
+		}
+	}
+	type rowError struct {
+		Row     int    `json:"row"`
+		Message string `json:"message"`
+	}
+	result := struct {
+		Created int        `json:"created"`
+		Failed  int        `json:"failed"`
+		Errors  []rowError `json:"errors"`
+	}{Errors: make([]rowError, 0)}
+	value := func(record []string, name string) string {
+		index, exists := columns[name]
+		if !exists || index >= len(record) {
+			return ""
+		}
+		return strings.TrimSpace(record[index])
+	}
+	for row := 2; row <= 1001; row++ {
+		record, readErr := reader.Read()
+		if errors.Is(readErr, io.EOF) {
+			break
+		}
+		if readErr != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, rowError{Row: row, Message: "invalid CSV row"})
+			continue
+		}
+		startDate, parseErr := time.Parse(time.DateOnly, value(record, "startdate"))
+		if parseErr != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, rowError{Row: row, Message: "startDate must be YYYY-MM-DD"})
+			continue
+		}
+		_, createErr := h.svc.Create(r.Context(), principal.OrganizationID, CreateInput{
+			FirstName: value(record, "firstname"), LastName: value(record, "lastname"),
+			WorkEmail: value(record, "workemail"), StartDate: startDate,
+			MobilePhone:    value(record, "mobilephone"),
+			EmployeeNumber: value(record, "employeenumber"), Team: value(record, "team"),
+			Location: value(record, "location"),
+		})
+		if createErr != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, rowError{Row: row, Message: createErr.Error()})
+			continue
+		}
+		result.Created++
+	}
+	if extra, readErr := reader.Read(); readErr == nil && len(extra) > 0 {
+		writeError(w, r, http.StatusBadRequest, "CSV_LIMIT_EXCEEDED", "CSV is limited to 1,000 employees")
+		return
+	}
+	orgID := principal.OrganizationID
+	if err := h.audit.Record(r.Context(), &orgID, principal.UserID, "employees.imported", "employee", "", map[string]any{
+		"created": result.Created, "failed": result.Failed,
+	}); err != nil {
+		slog.ErrorContext(r.Context(), "audit employee import failed", "error", err)
+	}
+	status := http.StatusOK
+	if result.Failed > 0 {
+		status = http.StatusMultiStatus
+	}
+	writeJSON(w, r, status, result)
 }
 
 // HandleGet returns one employee.
@@ -179,8 +284,11 @@ func (h *Handler) HandleGet(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, r, http.StatusOK, employee)
 }
 
-// HandleProvisionAccess creates login credentials for an invited employee.
-func (h *Handler) HandleProvisionAccess(w http.ResponseWriter, r *http.Request) {
+// HandleUpdate updates mutable employee fields (name, number, references,
+// buddy, status). Setting status to offboarded records an
+// employee.offboarded audit event.
+// Authorization: route-level RequirePermission (employees.update).
+func (h *Handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 	principal, ok := security.PrincipalFromContext(r.Context())
 	if !ok {
 		writeError(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
@@ -188,8 +296,75 @@ func (h *Handler) HandleProvisionAccess(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if !organizations.CanManageOrganization(principal.RoleCode) {
-		writeError(w, r, http.StatusForbidden, "FORBIDDEN", "Insufficient permissions")
+	var body struct {
+		FirstName         *string `json:"firstName"`
+		LastName          *string `json:"lastName"`
+		EmployeeNumber    *string `json:"employeeNumber"`
+		MobilePhone       *string `json:"mobilePhone"`
+		JobRoleID         *string `json:"jobRoleId"`
+		DepartmentID      *string `json:"departmentId"`
+		ManagerEmployeeID *string `json:"managerEmployeeId"`
+		BuddyEmployeeID   *string `json:"buddyEmployeeId"`
+		Team              *string `json:"team"`
+		Location          *string `json:"location"`
+		Status            *string `json:"status"`
+	}
+	if err := httpx.DecodeJSON(r, &body); err != nil {
+		writeError(w, r, http.StatusBadRequest, "INVALID_JSON", "Request body is invalid")
+
+		return
+	}
+
+	employeeID := chi.URLParam(r, "employeeID")
+
+	updated, err := h.svc.Update(r.Context(), principal.OrganizationID, employeeID, UpdateInput{
+		FirstName:         body.FirstName,
+		LastName:          body.LastName,
+		EmployeeNumber:    body.EmployeeNumber,
+		MobilePhone:       body.MobilePhone,
+		JobRoleID:         body.JobRoleID,
+		DepartmentID:      body.DepartmentID,
+		ManagerEmployeeID: body.ManagerEmployeeID,
+		BuddyEmployeeID:   body.BuddyEmployeeID,
+		Team:              body.Team,
+		Location:          body.Location,
+		Status:            body.Status,
+	})
+	if err != nil {
+		writeEmployeeError(w, r, err)
+
+		return
+	}
+
+	action := "employee.updated"
+	if body.Status != nil && updated.Status == statusOffboarded {
+		action = "employee.offboarded"
+	}
+
+	orgID := principal.OrganizationID
+	if err := h.audit.Record(
+		r.Context(),
+		&orgID,
+		principal.UserID,
+		action,
+		"employee",
+		updated.ID,
+		map[string]any{"status": updated.Status},
+	); err != nil {
+		// The update is already persisted; a failed audit write must not
+		// turn a committed change into a reported failure.
+		slog.ErrorContext(r.Context(), "audit employee update failed", "error", err)
+	}
+
+	writeJSON(w, r, http.StatusOK, updated)
+}
+
+// HandleProvisionAccess creates login credentials for an invited employee.
+// Authorization: route-level RequirePermission (employees.update).
+func (h *Handler) HandleProvisionAccess(w http.ResponseWriter, r *http.Request) {
+	principal, ok := security.PrincipalFromContext(r.Context())
+	if !ok {
+		writeError(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
 
 		return
 	}
@@ -204,7 +379,7 @@ func (h *Handler) HandleProvisionAccess(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	updated, userID, err := h.provisionEmployeeAccess(
+	updated, userID, err := h.provisioner.Provision(
 		r.Context(),
 		principal.OrganizationID,
 		chi.URLParam(r, "employeeID"),
@@ -214,8 +389,10 @@ func (h *Handler) HandleProvisionAccess(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		switch {
 		case errors.Is(err, errProvisionAccount):
-			writeError(w, r, http.StatusBadRequest, "PROVISION_FAILED", err.Error())
+			slog.ErrorContext(r.Context(), "provision employee account failed", "error", err)
+			writeError(w, r, http.StatusBadRequest, "PROVISION_FAILED", "Unable to provision employee account")
 		case errors.Is(err, errProvisionMember):
+			slog.ErrorContext(r.Context(), "provision employee membership failed", "error", err)
 			writeError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Unable to add membership")
 		default:
 			writeEmployeeError(w, r, err)
@@ -234,43 +411,12 @@ func (h *Handler) HandleProvisionAccess(w http.ResponseWriter, r *http.Request) 
 		updated.ID,
 		map[string]any{"userId": userID},
 	); err != nil {
+		// Provisioning is already committed; a failed audit write must not
+		// turn a committed change into a reported failure.
 		slog.ErrorContext(r.Context(), "audit employee provision failed", "error", err)
-		writeError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Unable to record audit event")
-
-		return
 	}
 
 	writeJSON(w, r, http.StatusOK, updated)
-}
-
-func (h *Handler) provisionEmployeeAccess(
-	ctx context.Context,
-	organizationID, employeeID, displayName, password string,
-) (Employee, string, error) {
-	employee, err := h.svc.Get(ctx, organizationID, employeeID)
-	if err != nil {
-		return Employee{}, "", err
-	}
-
-	if displayName == "" {
-		displayName = employee.FirstName + " " + employee.LastName
-	}
-
-	userID, err := h.accounts.CreateUserAccount(ctx, employee.WorkEmail, displayName, password)
-	if err != nil {
-		return Employee{}, "", fmt.Errorf("%w: %w", errProvisionAccount, err)
-	}
-
-	if err := h.members.AddEmployeeMember(ctx, organizationID, userID); err != nil {
-		return Employee{}, "", fmt.Errorf("%w: %w", errProvisionMember, err)
-	}
-
-	updated, err := h.svc.LinkUser(ctx, organizationID, employeeID, userID)
-	if err != nil {
-		return Employee{}, "", err
-	}
-
-	return updated, userID, nil
 }
 
 func writeEmployeeError(w http.ResponseWriter, r *http.Request, err error) {

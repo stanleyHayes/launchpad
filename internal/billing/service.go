@@ -29,17 +29,20 @@ type OrganizationSummary struct {
 
 // Service implements billing use cases.
 type Service struct {
-	repo  Repository
-	orgs  OrganizationReader
-	plans OrgPlanUpdater
+	repo          Repository
+	orgs          OrganizationReader
+	plans         OrgPlanUpdater
+	payments      PaymentProvider
+	webhookSecret string
 }
 
 // NewService constructs a Service.
 func NewService(repo Repository, orgs OrganizationReader, plans OrgPlanUpdater) *Service {
-	return &Service{repo: repo, orgs: orgs, plans: plans}
+	return &Service{repo: repo, orgs: orgs, plans: plans, payments: nil, webhookSecret: ""}
 }
 
-// SeedDefaults upserts built-in billing plans.
+// SeedDefaults inserts built-in billing plans that are missing. Existing plans
+// are left untouched so admin changes survive restarts.
 func (s *Service) SeedDefaults(ctx context.Context) error {
 	now := time.Now().UTC()
 
@@ -85,9 +88,10 @@ func (s *Service) SeedDefaults(ctx context.Context) error {
 	}
 
 	for _, plan := range defaults {
-		existing, err := s.repo.GetPlan(ctx, plan.Code)
-		if err == nil {
-			plan.CreatedAt = existing.CreatedAt
+		if _, err := s.repo.GetPlan(ctx, plan.Code); err == nil {
+			continue
+		} else if !errors.Is(err, ErrNotFound) {
+			return fmt.Errorf("get billing plan %q: %w", plan.Code, err)
 		}
 
 		if err := s.repo.UpsertPlan(ctx, plan); err != nil {
@@ -259,7 +263,20 @@ func (s *Service) SetOrganizationPlan(ctx context.Context, in SetOrganizationPla
 		return Subscription{}, err
 	}
 
-	return s.upsertOrganizationSubscription(ctx, organizationID, planCode, status)
+	subscription, err := s.upsertOrganizationSubscription(ctx, organizationID, planCode, status)
+	if err != nil {
+		return Subscription{}, err
+	}
+
+	// Assigning a paid plan bills the first period immediately. Free plans
+	// (starter, enterprise custom pricing) never generate invoices.
+	if plan.PriceMonthlyCents > 0 {
+		if _, err := s.issueInvoice(ctx, subscription, plan); err != nil {
+			return Subscription{}, err
+		}
+	}
+
+	return subscription, nil
 }
 
 func (s *Service) createOrganizationSubscription(
