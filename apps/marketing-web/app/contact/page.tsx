@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { buildMetadata } from "../../lib/seo";
+import { getSiteInformation } from "../../lib/site-information";
 import { LegalSection, LegalShell } from "../legal-shell";
 import { Icon } from "../ui-icon";
 
@@ -11,12 +12,17 @@ export const metadata: Metadata = buildMetadata({
   path: "/contact",
 });
 
-export default function ContactPage() {
+export const revalidate = 60;
+
+export default async function ContactPage() {
+  const siteInformation = await getSiteInformation();
+
   return (
     <LegalShell
       eyebrow="Company"
       title="Contact us"
       intro="Questions about onboarding your team with LaunchPad? Here are the fastest ways to reach us."
+      responseTime={siteInformation.responseTime}
       icon="message"
       sections={[
         { id: "demo", label: "See LaunchPad in action" },
@@ -25,7 +31,7 @@ export default function ContactPage() {
         { id: "security", label: "Security reports" },
       ]}
       highlights={[
-        { icon: "clock", label: "Response time", value: "One business day" },
+        { icon: "clock", label: "Response time", value: siteInformation.responseTime },
         { icon: "message", label: "Demo", value: "Tailored to your team" },
         { icon: "shield", label: "Security", value: "Direct reporting channel" },
       ]}
@@ -49,10 +55,10 @@ export default function ContactPage() {
         <p>
           Pricing, plan fit, security reviews, and procurement:{" "}
           <a
-            href="mailto:sales@launchpad.example"
+            href={`mailto:${siteInformation.salesEmail}`}
             className="text-[var(--lp-brand)] hover:underline"
           >
-            sales@launchpad.example
+            {siteInformation.salesEmail}
           </a>
           .
         </p>
@@ -62,10 +68,10 @@ export default function ContactPage() {
         <p>
           Already a customer? Reach the support team at{" "}
           <a
-            href="mailto:support@launchpad.example"
+            href={`mailto:${siteInformation.supportEmail}`}
             className="text-[var(--lp-brand)] hover:underline"
           >
-            support@launchpad.example
+            {siteInformation.supportEmail}
           </a>
           . Administrators can also raise tickets from the support area inside the product, where
           they are tracked with status and priority.
@@ -76,10 +82,10 @@ export default function ContactPage() {
         <p>
           To report a vulnerability, please use{" "}
           <a
-            href="mailto:security@launchpad.example"
+            href={`mailto:${siteInformation.securityEmail}`}
             className="text-[var(--lp-brand)] hover:underline"
           >
-            security@launchpad.example
+            {siteInformation.securityEmail}
           </a>
           . See our{" "}
           <Link href="/security" className="text-[var(--lp-brand)] hover:underline">

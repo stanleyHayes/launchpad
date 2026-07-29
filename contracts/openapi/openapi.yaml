@@ -228,7 +228,7 @@ paths:
         "200":
           description: OK
     patch:
-      summary: Update a draft CMS page
+      summary: Update a draft CMS page or published settings record
       security:
         - bearerAuth: []
       parameters:
@@ -2336,12 +2336,18 @@ components:
         title: { type: string }
         summary: { type: string }
         body: { type: string }
+        contentType:
+          type: string
+          enum: [page, blog, faq, legal, settings]
     UpdateCMSPageRequest:
       type: object
       properties:
         title: { type: string }
         summary: { type: string }
         body: { type: string }
+        contentType:
+          type: string
+          enum: [page, blog, faq, legal, settings]
     JourneyVersionSummary:
       type: object
       required: [version, status, stepCount]

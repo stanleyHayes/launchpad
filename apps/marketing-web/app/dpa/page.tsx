@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { buildMetadata } from "../../lib/seo";
+import { getSiteInformation } from "../../lib/site-information";
 import { LegalSection, LegalShell } from "../legal-shell";
 
 export const metadata: Metadata = buildMetadata({
@@ -8,13 +9,17 @@ export const metadata: Metadata = buildMetadata({
   path: "/dpa",
 });
 
-export default function DPAPage() {
+export const revalidate = 60;
+
+export default async function DPAPage() {
+  const siteInformation = await getSiteInformation();
+
   return (
     <LegalShell
       eyebrow="Legal"
       title="Data Processing Addendum"
       intro="The terms that govern LaunchPad's processing of customer personal data."
-      updated="July 29, 2026"
+      updated={siteInformation.dpaEffectiveDate}
       icon="shield"
       sections={[
         { id: "scope", label: "Scope and roles" },
@@ -46,7 +51,7 @@ export default function DPAPage() {
         <p>At termination or documented request, LaunchPad will delete or return customer personal data except where retention is legally required. We will make relevant compliance information available and support a proportionate audit process subject to confidentiality and security controls.</p>
       </LegalSection>
       <LegalSection id="contact" heading="Contact">
-        <p>To execute this addendum or ask a privacy question, contact <a className="text-[var(--lp-brand)] hover:underline" href="mailto:privacy@launchpad.example">privacy@launchpad.example</a>.</p>
+        <p>To execute this addendum or ask a privacy question, contact <a className="text-[var(--lp-brand)] hover:underline" href={`mailto:${siteInformation.privacyEmail}`}>{siteInformation.privacyEmail}</a>.</p>
       </LegalSection>
     </LegalShell>
   );

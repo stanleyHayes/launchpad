@@ -127,6 +127,36 @@ func TestCreateRejectsInvalidSlug(t *testing.T) {
 	}
 }
 
+func TestPublishedSettingsRemainEditable(t *testing.T) {
+	t.Parallel()
+
+	svc := cms.NewService(&memoryRepo{})
+	page, err := svc.Create(context.Background(), cms.CreateInput{
+		Slug:        "site-information",
+		Title:       "Site information",
+		Body:        `{"salesEmail":"sales@example.com"}`,
+		ContentType: "settings",
+	})
+	if err != nil {
+		t.Fatalf("create settings: %v", err)
+	}
+
+	page, err = svc.Publish(context.Background(), page.ID)
+	if err != nil {
+		t.Fatalf("publish settings: %v", err)
+	}
+
+	body := `{"salesEmail":"hello@example.com"}`
+	updated, err := svc.Update(context.Background(), page.ID, cms.UpdateInput{Body: &body})
+	if err != nil {
+		t.Fatalf("update published settings: %v", err)
+	}
+
+	if updated.Status != "published" || updated.Body != body {
+		t.Fatalf("updated settings = %+v", updated)
+	}
+}
+
 // recordingAuditRepo captures written audit events.
 type recordingAuditRepo struct {
 	events []audit.Event

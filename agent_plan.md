@@ -85,7 +85,7 @@ Legend: **DONE** = works end-to-end (API + UI where applicable) · **PARTIAL** =
 | Home/product/pricing/demo/signup, SEO+OG+JSON-LD+sitemap+robots | DONE | `apps/marketing-web` |
 | Feature pages (10), solutions pages (10) | DONE | SEO/SSG route families plus index pages, navigation, footer, sitemap |
 | Integrations directory (public) | DONE | Public provider directory with status/detail content |
-| **Legal/company pages (privacy, terms, DPA, security, contact)** | DONE | Static, metadata-backed legal/company routes linked in footer and sitemap |
+| **Legal/company pages (privacy, terms, DPA, security, contact)** | DONE | Metadata-backed routes with CMS-managed public emails, response-time messaging, and effective dates; linked in footer and sitemap |
 | Blog/resources/templates preview, i18n, newsletter, UTM, cookie consent, chat/status, demo scheduling | DONE | CMS blog support plus public resources/templates, French locale, newsletter capture, persisted UTM attribution, consent controls, contact chat, live API status and preferred demo scheduling |
 | GitHub/Jira integrations (connect/disconnect/health) | DONE | `internal/integrations` plus organization-admin connection/health UI |
 | Calendars (Google/Microsoft) | DONE | Authorization-code flows with one-time state, encrypted access/refresh tokens, automatic refresh, event create/update, and two-provider admin UI |

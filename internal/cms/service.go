@@ -131,7 +131,10 @@ func (s *Service) Update(ctx context.Context, id string, in UpdateInput) (Page, 
 		return Page{}, fmt.Errorf("get cms page for update: %w", err)
 	}
 
-	if page.Status != statusDraft {
+	// Site information is a small, structured settings document rather than
+	// editorial page content. Platform editors can update it in place so
+	// contact details and effective dates do not require a draft lifecycle.
+	if page.Status != statusDraft && page.ContentType != "settings" {
 		return Page{}, ErrNotDraft
 	}
 
@@ -183,7 +186,7 @@ func (s *Service) Update(ctx context.Context, id string, in UpdateInput) (Page, 
 
 func isValidContentType(value string) bool {
 	switch value {
-	case "page", "blog", "faq", "legal":
+	case "page", "blog", "faq", "legal", "settings":
 		return true
 	default:
 		return false

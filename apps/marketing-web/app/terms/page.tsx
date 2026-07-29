@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { buildMetadata } from "../../lib/seo";
+import { getSiteInformation } from "../../lib/site-information";
 import { LegalSection, LegalShell } from "../legal-shell";
 
 export const metadata: Metadata = buildMetadata({
@@ -10,13 +11,17 @@ export const metadata: Metadata = buildMetadata({
   path: "/terms",
 });
 
-export default function TermsPage() {
+export const revalidate = 60;
+
+export default async function TermsPage() {
+  const siteInformation = await getSiteInformation();
+
   return (
     <LegalShell
       eyebrow="Legal"
       title="Terms of Service"
       intro="The agreement between LaunchPad, Inc. and the organizations that use our onboarding platform."
-      updated="July 28, 2026"
+      updated={siteInformation.termsEffectiveDate}
       icon="book"
       sections={[
         { id: "service", label: "The service" },
@@ -123,10 +128,10 @@ export default function TermsPage() {
         <p>
           Questions about these terms:{" "}
           <a
-            href="mailto:legal@launchpad.example"
+            href={`mailto:${siteInformation.legalEmail}`}
             className="text-[var(--lp-brand)] hover:underline"
           >
-            legal@launchpad.example
+            {siteInformation.legalEmail}
           </a>
           .
         </p>

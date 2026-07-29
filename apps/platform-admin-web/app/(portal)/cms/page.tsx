@@ -7,6 +7,7 @@ import { ApiError } from "@launchpad/api-client";
 import { EmptyState, PageHeader, Reveal, Surface } from "@launchpad/ui";
 import { getClient } from "@/lib/api";
 import { clearSession, getAccessToken } from "@/lib/session";
+import { SiteInformationEditor } from "./site-information-editor";
 
 export default function CMSPagesPage() {
   const router = useRouter();
@@ -127,6 +128,10 @@ export default function CMSPagesPage() {
         ) : null}
 
         <Reveal delay={1}>
+          <SiteInformationEditor pages={pages} onSaved={() => reload()} />
+        </Reveal>
+
+        <Reveal delay={2}>
           <Surface>
             <h2 className="text-lg font-semibold">New draft</h2>
             <form className="mt-4 grid gap-3" onSubmit={onCreate}>
@@ -182,7 +187,7 @@ export default function CMSPagesPage() {
           </Surface>
         </Reveal>
 
-        <Reveal delay={2}>
+        <Reveal delay={3}>
           <Surface className="overflow-hidden p-0">
             <div className="border-b border-[var(--lp-border)] px-5 py-4">
               <h2 className="text-lg font-semibold">All pages</h2>
@@ -200,7 +205,7 @@ export default function CMSPagesPage() {
               </div>
             ) : (
               <ul className="divide-y divide-[var(--lp-border)]">
-                {pages.map((page) => (
+                {pages.filter((page) => page.slug !== "site-information").map((page) => (
                   <li key={page.id} className="flex flex-wrap items-start justify-between gap-3 px-5 py-4">
                     <div>
                       <p className="font-medium">{page.title}</p>

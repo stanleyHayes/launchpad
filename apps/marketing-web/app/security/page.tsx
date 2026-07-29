@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { buildMetadata } from "../../lib/seo";
+import { getSiteInformation } from "../../lib/site-information";
 import { LegalSection, LegalShell } from "../legal-shell";
 
 export const metadata: Metadata = buildMetadata({
@@ -10,13 +11,17 @@ export const metadata: Metadata = buildMetadata({
   path: "/security",
 });
 
-export default function SecurityPage() {
+export const revalidate = 60;
+
+export default async function SecurityPage() {
+  const siteInformation = await getSiteInformation();
+
   return (
     <LegalShell
       eyebrow="Company"
       title="Security at LaunchPad"
       intro="The controls built into the LaunchPad platform, described plainly so your security team can evaluate them."
-      updated="July 28, 2026"
+      updated={siteInformation.securityEffectiveDate}
       icon="shield"
       sections={[
         { id: "identity", label: "Identity and access" },
@@ -112,10 +117,10 @@ export default function SecurityPage() {
         <p>
           If you believe you have found a security issue in LaunchPad, please report it to{" "}
           <a
-            href="mailto:security@launchpad.example"
+            href={`mailto:${siteInformation.securityEmail}`}
             className="text-[var(--lp-brand)] hover:underline"
           >
-            security@launchpad.example
+            {siteInformation.securityEmail}
           </a>
           . We ask that you give us a reasonable window to investigate and fix the issue before any
           public disclosure.

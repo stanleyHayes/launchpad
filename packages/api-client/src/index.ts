@@ -1372,7 +1372,7 @@ export type CreateCMSPageRequest = {
   title: string;
   summary?: string;
   body: string;
-  contentType?: "page" | "blog" | "faq" | "legal";
+  contentType?: "page" | "blog" | "faq" | "legal" | "settings";
   navLabel?: string;
   navOrder?: number;
 };
@@ -1381,7 +1381,7 @@ export type UpdateCMSPageRequest = {
   title?: string;
   summary?: string;
   body?: string;
-  contentType?: "page" | "blog" | "faq" | "legal";
+  contentType?: "page" | "blog" | "faq" | "legal" | "settings";
   navLabel?: string;
   navOrder?: number;
 };

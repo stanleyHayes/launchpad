@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { buildMetadata } from "../../lib/seo";
+import { getSiteInformation } from "../../lib/site-information";
 import { LegalSection, LegalShell } from "../legal-shell";
 
 export const metadata: Metadata = buildMetadata({
@@ -9,13 +10,17 @@ export const metadata: Metadata = buildMetadata({
   path: "/privacy",
 });
 
-export default function PrivacyPage() {
+export const revalidate = 60;
+
+export default async function PrivacyPage() {
+  const siteInformation = await getSiteInformation();
+
   return (
     <LegalShell
       eyebrow="Legal"
       title="Privacy Policy"
       intro="How LaunchPad collects, uses, and protects personal data when you use our onboarding platform."
-      updated="July 28, 2026"
+      updated={siteInformation.privacyEffectiveDate}
       icon="lock"
       sections={[
         { id: "scope", label: "Who we are" },
@@ -116,10 +121,10 @@ export default function PrivacyPage() {
           customer organization should direct requests to their organization&rsquo;s administrator
           first, since that organization controls the data. You can also reach us at{" "}
           <a
-            href="mailto:privacy@launchpad.example"
+            href={`mailto:${siteInformation.privacyEmail}`}
             className="text-[var(--lp-brand)] hover:underline"
           >
-            privacy@launchpad.example
+            {siteInformation.privacyEmail}
           </a>{" "}
           and we will route export and deletion requests to the right place.
         </p>
@@ -138,10 +143,10 @@ export default function PrivacyPage() {
           We may update this policy as the product evolves; material changes will be reflected with
           a new &ldquo;last updated&rdquo; date above. Questions about this policy go to{" "}
           <a
-            href="mailto:privacy@launchpad.example"
+            href={`mailto:${siteInformation.privacyEmail}`}
             className="text-[var(--lp-brand)] hover:underline"
           >
-            privacy@launchpad.example
+            {siteInformation.privacyEmail}
           </a>
           .
         </p>

@@ -21,6 +21,7 @@ export function LegalShell({
   title,
   intro,
   updated,
+  responseTime,
   icon = "book",
   sections,
   highlights,
@@ -30,6 +31,7 @@ export function LegalShell({
   title: string;
   intro: string;
   updated?: string;
+  responseTime?: string;
   icon?: IconName;
   sections: LegalNavItem[];
   highlights: LegalHighlight[];
@@ -64,7 +66,7 @@ export function LegalShell({
               ) : (
                 <p className="mt-5 flex items-center gap-2 text-sm font-medium text-[var(--lp-ink)]">
                   <Icon name="message" className="h-4 w-4 text-[var(--lp-brand)]" />
-                  We typically reply within one business day
+                  Typical response: {responseTime ?? "One business day"}
                 </p>
               )}
             </div>
