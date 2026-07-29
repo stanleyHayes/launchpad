@@ -697,9 +697,36 @@ export const marketplaceTemplateSchema = z.object({
   installationCount: z.number().int(),
   ratingAverage: z.number(),
   ratingCount: z.number().int(),
+  priceCents: z.number().int().nonnegative(),
+  currency: z.string(),
   createdBy: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
+});
+
+export const marketplacePurchaseSchema = z.object({
+  id: z.string(),
+  templateId: z.string(),
+  organizationId: z.string(),
+  buyerUserId: z.string(),
+  sellerOrganizationId: z.string(),
+  amountCents: z.number().int(),
+  currency: z.string(),
+  platformFeeCents: z.number().int(),
+  sellerEarningsCents: z.number().int(),
+  reference: z.string(),
+  status: z.string(),
+  installationId: z.string().optional(),
+  journeyTemplateId: z.string().optional(),
+  paidAt: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const marketplaceCheckoutSchema = z.object({
+  authorizationUrl: z.string().url(),
+  reference: z.string(),
+  purchase: marketplacePurchaseSchema,
 });
 
 export const marketplaceInstallationSchema = z.object({
@@ -1221,6 +1248,8 @@ export type FeatureFlag = z.infer<typeof featureFlagSchema>;
 export type MarketplaceTemplate = z.infer<typeof marketplaceTemplateSchema>;
 export type MarketplaceStep = z.infer<typeof marketplaceStepSchema>;
 export type MarketplaceInstallation = z.infer<typeof marketplaceInstallationSchema>;
+export type MarketplacePurchase = z.infer<typeof marketplacePurchaseSchema>;
+export type MarketplaceCheckout = z.infer<typeof marketplaceCheckoutSchema>;
 export type FeatureFlagHistory = z.infer<typeof featureFlagHistorySchema>;
 export type OrgFeatureFlags = z.infer<typeof orgFeatureFlagsSchema>;
 export type Plan = z.infer<typeof planSchema>;
@@ -2290,6 +2319,10 @@ export function createLaunchPadClient(options: LaunchPadClientOptions) {
       return request("/api/v1/marketplace/templates", { method: "GET" }, z.array(marketplaceTemplateSchema));
     },
 
+    listMyMarketplaceTemplates(): Promise<MarketplaceTemplate[]> {
+      return request("/api/v1/marketplace/templates/mine", { method: "GET" }, z.array(marketplaceTemplateSchema));
+    },
+
     listPlatformMarketplaceTemplates(): Promise<MarketplaceTemplate[]> {
       return request("/api/v1/platform/marketplace/templates", { method: "GET" }, z.array(marketplaceTemplateSchema));
     },
@@ -2304,10 +2337,23 @@ export function createLaunchPadClient(options: LaunchPadClientOptions) {
 
     submitMarketplaceTemplate(payload: {
       name: string; description: string; category: string; steps: MarketplaceStep[];
+      priceCents?: number; currency?: string;
     }): Promise<MarketplaceTemplate> {
       return request("/api/v1/marketplace/templates/submit", {
         method: "POST", body: JSON.stringify(payload),
       }, marketplaceTemplateSchema);
+    },
+
+    purchaseMarketplaceTemplate(id: string): Promise<MarketplaceCheckout> {
+      return request(`/api/v1/marketplace/templates/${encodeURIComponent(id)}/purchase`, {
+        method: "POST",
+      }, marketplaceCheckoutSchema);
+    },
+
+    completeMarketplacePurchase(reference: string): Promise<MarketplaceInstallation> {
+      return request("/api/v1/marketplace/purchases/complete", {
+        method: "POST", body: JSON.stringify({ reference }),
+      }, marketplaceInstallationSchema);
     },
 
     publishMarketplaceTemplate(id: string): Promise<MarketplaceTemplate> {

@@ -31,6 +31,16 @@ func (h *Handler) HandlePlatformList(w http.ResponseWriter, r *http.Request) {
 	h.write(w, r, items, err, http.StatusOK)
 }
 
+func (h *Handler) HandleMyTemplates(w http.ResponseWriter, r *http.Request) {
+	p, ok := principal(r)
+	if !ok {
+		h.unauthorized(w, r)
+		return
+	}
+	items, err := h.svc.ListByOrganization(r.Context(), p.OrganizationID)
+	h.write(w, r, items, err, http.StatusOK)
+}
+
 func (h *Handler) HandlePlatformCreate(w http.ResponseWriter, r *http.Request) {
 	principal, ok := principal(r)
 	if !ok {
@@ -42,6 +52,8 @@ func (h *Handler) HandlePlatformCreate(w http.ResponseWriter, r *http.Request) {
 		Description string `json:"description"`
 		Category    string `json:"category"`
 		Steps       []Step `json:"steps"`
+		PriceCents  int    `json:"priceCents"`
+		Currency    string `json:"currency"`
 	}
 	if httpx.DecodeJSON(r, &body) != nil {
 		h.invalidJSON(w, r)
@@ -50,6 +62,7 @@ func (h *Handler) HandlePlatformCreate(w http.ResponseWriter, r *http.Request) {
 	item, err := h.svc.Create(r.Context(), CreateInput{
 		Name: body.Name, Description: body.Description, Category: body.Category,
 		Official: true, Steps: body.Steps, CreatedBy: principal.UserID,
+		PriceCents: body.PriceCents, Currency: body.Currency,
 	})
 	if err == nil {
 		h.record(r, principal, nil, "marketplace_template.created", item.ID)
@@ -68,6 +81,8 @@ func (h *Handler) HandleSubmit(w http.ResponseWriter, r *http.Request) {
 		Description string `json:"description"`
 		Category    string `json:"category"`
 		Steps       []Step `json:"steps"`
+		PriceCents  int    `json:"priceCents"`
+		Currency    string `json:"currency"`
 	}
 	if httpx.DecodeJSON(r, &body) != nil {
 		h.invalidJSON(w, r)
@@ -77,10 +92,48 @@ func (h *Handler) HandleSubmit(w http.ResponseWriter, r *http.Request) {
 		Name: body.Name, Description: body.Description, Category: body.Category,
 		Official: false, SubmittedByOrganizationID: principal.OrganizationID,
 		Steps: body.Steps, CreatedBy: principal.UserID,
+		PriceCents: body.PriceCents, Currency: body.Currency,
 	})
 	if err == nil {
 		orgID := principal.OrganizationID
 		h.record(r, principal, &orgID, "marketplace_template.submitted", item.ID)
+	}
+	h.write(w, r, item, err, http.StatusCreated)
+}
+
+func (h *Handler) HandlePurchase(w http.ResponseWriter, r *http.Request) {
+	p, ok := principal(r)
+	if !ok {
+		h.unauthorized(w, r)
+		return
+	}
+	item, err := h.svc.BeginPurchase(
+		r.Context(), chi.URLParam(r, "templateID"), p.OrganizationID, p.UserID,
+	)
+	if err == nil {
+		orgID := p.OrganizationID
+		h.record(r, p, &orgID, "marketplace_template.purchase_started", item.Purchase.ID)
+	}
+	h.write(w, r, item, err, http.StatusCreated)
+}
+
+func (h *Handler) HandleCompletePurchase(w http.ResponseWriter, r *http.Request) {
+	p, ok := principal(r)
+	if !ok {
+		h.unauthorized(w, r)
+		return
+	}
+	var body struct {
+		Reference string `json:"reference"`
+	}
+	if httpx.DecodeJSON(r, &body) != nil {
+		h.invalidJSON(w, r)
+		return
+	}
+	item, err := h.svc.CompletePurchase(r.Context(), body.Reference, p.OrganizationID, p.UserID)
+	if err == nil {
+		orgID := p.OrganizationID
+		h.record(r, p, &orgID, "marketplace_template.purchased", item.TemplateID)
 	}
 	h.write(w, r, item, err, http.StatusCreated)
 }
@@ -199,6 +252,8 @@ func (h *Handler) write(w http.ResponseWriter, r *http.Request, data any, err er
 		_ = httpx.WriteError(w, http.StatusNotFound, "NOT_FOUND", err.Error())
 	case errors.Is(err, ErrInvalidState):
 		_ = httpx.WriteError(w, http.StatusConflict, "INVALID_STATE", err.Error())
+	case errors.Is(err, ErrPaymentRequired):
+		_ = httpx.WriteError(w, http.StatusPaymentRequired, "PAYMENT_REQUIRED", err.Error())
 	default:
 		slog.ErrorContext(r.Context(), "marketplace handler", "error", err)
 		_ = httpx.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Unexpected error")

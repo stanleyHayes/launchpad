@@ -11,6 +11,10 @@ type Repository interface {
 	CreateInstallation(context.Context, Installation) error
 	UpsertRating(context.Context, Rating) error
 	ListRatings(context.Context, string) ([]Rating, error)
+	CreatePurchase(context.Context, Purchase) error
+	GetPurchaseByReference(context.Context, string, string) (Purchase, error)
+	UpdatePurchase(context.Context, Purchase) error
+	HasPaidPurchase(context.Context, string, string) (bool, error)
 }
 
 type JourneyInstaller interface {

@@ -789,16 +789,36 @@ paths:
         "200": { description: OK }
   /marketplace/templates/submit:
     post:
-      summary: Submit a customer-authored template for platform review
+      summary: Submit a free or paid customer-authored template for platform review
       security: [{ bearerAuth: [] }]
       responses:
         "201": { description: Submitted }
+  /marketplace/templates/mine:
+    get:
+      summary: List marketplace templates authored by the current organization
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Creator template workspace }
   /marketplace/templates/{templateID}/install:
     post:
       summary: Install a published snapshot as an independent organization journey draft
       security: [{ bearerAuth: [] }]
       responses:
         "201": { description: Installation record and new journey id }
+        "402": { description: Paid template purchase required }
+  /marketplace/templates/{templateID}/purchase:
+    post:
+      summary: Start hosted checkout for a paid marketplace template
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201": { description: Hosted checkout URL and pending purchase ledger entry }
+  /marketplace/purchases/complete:
+    post:
+      summary: Verify a marketplace payment and install the purchased template
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201": { description: Verified purchase installation }
+        "402": { description: Payment has not settled or does not match the listing }
   /marketplace/templates/{templateID}/rating:
     put:
       summary: Create or replace the caller's 1-5 rating

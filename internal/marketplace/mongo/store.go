@@ -18,6 +18,7 @@ type Store struct {
 	templates     *drivermongo.Collection
 	installations *drivermongo.Collection
 	ratings       *drivermongo.Collection
+	purchases     *drivermongo.Collection
 }
 
 func NewStore(db *drivermongo.Database) *Store {
@@ -25,6 +26,7 @@ func NewStore(db *drivermongo.Database) *Store {
 		templates:     db.Collection("marketplace_templates"),
 		installations: db.Collection("marketplace_installations"),
 		ratings:       db.Collection("marketplace_ratings"),
+		purchases:     db.Collection("marketplace_purchases"),
 	}
 }
 
@@ -45,6 +47,13 @@ func (s *Store) EnsureIndexes(ctx context.Context) error {
 		Options: options.Index().SetUnique(true),
 	}); err != nil {
 		return fmt.Errorf("ensure marketplace rating indexes: %w", err)
+	}
+	if _, err := s.purchases.Indexes().CreateMany(ctx, []drivermongo.IndexModel{
+		{Keys: bson.D{{Key: "reference", Value: 1}}, Options: options.Index().SetUnique(true)},
+		{Keys: bson.D{{Key: "organizationId", Value: 1}, {Key: "templateId", Value: 1}, {Key: "status", Value: 1}}},
+		{Keys: bson.D{{Key: "sellerOrganizationId", Value: 1}, {Key: "status", Value: 1}, {Key: "createdAt", Value: -1}}},
+	}); err != nil {
+		return fmt.Errorf("ensure marketplace purchase indexes: %w", err)
 	}
 	return nil
 }
@@ -126,4 +135,44 @@ func (s *Store) ListRatings(ctx context.Context, templateID string) ([]marketpla
 		return nil, errors.Join(decodeErr, closeErr)
 	}
 	return items, nil
+}
+
+func (s *Store) CreatePurchase(ctx context.Context, item marketplace.Purchase) error {
+	if _, err := s.purchases.InsertOne(ctx, item); err != nil {
+		return fmt.Errorf("insert marketplace purchase: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) GetPurchaseByReference(ctx context.Context, organizationID, reference string) (marketplace.Purchase, error) {
+	var item marketplace.Purchase
+	err := s.purchases.FindOne(ctx, bson.M{"organizationId": organizationID, "reference": reference}).Decode(&item)
+	if errors.Is(err, drivermongo.ErrNoDocuments) {
+		return marketplace.Purchase{}, marketplace.ErrNotFound
+	}
+	if err != nil {
+		return marketplace.Purchase{}, fmt.Errorf("find marketplace purchase: %w", err)
+	}
+	return item, nil
+}
+
+func (s *Store) UpdatePurchase(ctx context.Context, item marketplace.Purchase) error {
+	result, err := s.purchases.ReplaceOne(ctx, bson.M{"_id": item.ID}, item)
+	if err != nil {
+		return fmt.Errorf("replace marketplace purchase: %w", err)
+	}
+	if result.MatchedCount == 0 {
+		return marketplace.ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) HasPaidPurchase(ctx context.Context, organizationID, templateID string) (bool, error) {
+	count, err := s.purchases.CountDocuments(ctx, bson.M{
+		"organizationId": organizationID, "templateId": templateID, "status": marketplace.PurchasePaid,
+	})
+	if err != nil {
+		return false, fmt.Errorf("count marketplace purchases: %w", err)
+	}
+	return count > 0, nil
 }

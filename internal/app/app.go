@@ -960,10 +960,14 @@ func buildHandlers(db *drivermongo.Database, deps Dependencies, cfg config.Confi
 	billingOrg := billingOrgAdapter{orgs: orgSvc}
 	billingSvc := billing.NewService(stores.billing, billingOrg, billingOrg)
 	if cfg.PaystackSecretKey != "" {
-		billingSvc.SetPayments(
-			billingpaystack.NewClient(cfg.PaystackSecretKey, cfg.PaystackBaseURL, nil),
-			cfg.PaystackWebhookSecret,
-		)
+		paystackClient := billingpaystack.NewClient(cfg.PaystackSecretKey, cfg.PaystackBaseURL, nil)
+		billingSvc.SetPayments(paystackClient, cfg.PaystackWebhookSecret)
+		marketplaceSvc.
+			WithPayments(paystackClient, cfg.OrgAdminURL+"/marketplace").
+			WithBuyerEmail(func(ctx context.Context, userID string) (string, error) {
+				user, err := stores.user.GetByID(ctx, userID)
+				return user.Email, err
+			})
 	}
 	scheduler.Register("billing_dunning", billingSvc.RunDunning)
 	featureFlagSvc := featureflags.NewService(stores.featureFlag, orgPlanCodeReader{orgs: orgSvc})
@@ -1691,9 +1695,18 @@ func registerOrganizationRoutes(
 		"/marketplace/templates/submit",
 		permit(permissions, roles.PermissionJourneysCreate, routeHandlers.marketplace.HandleSubmit),
 	)
+	orgRoutes.Get("/marketplace/templates/mine", routeHandlers.marketplace.HandleMyTemplates)
 	orgRoutes.Post(
 		"/marketplace/templates/{templateID}/install",
 		permit(permissions, roles.PermissionJourneysCreate, routeHandlers.marketplace.HandleInstall),
+	)
+	orgRoutes.Post(
+		"/marketplace/templates/{templateID}/purchase",
+		permit(permissions, roles.PermissionJourneysCreate, routeHandlers.marketplace.HandlePurchase),
+	)
+	orgRoutes.Post(
+		"/marketplace/purchases/complete",
+		permit(permissions, roles.PermissionJourneysCreate, routeHandlers.marketplace.HandleCompletePurchase),
 	)
 	orgRoutes.Put("/marketplace/templates/{templateID}/rating", routeHandlers.marketplace.HandleRate)
 	orgRoutes.Get("/assessments", permit(permissions, roles.PermissionAssessmentsManage, routeHandlers.assessments.HandleList))

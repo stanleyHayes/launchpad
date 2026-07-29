@@ -2,8 +2,10 @@ package marketplace_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
+	"launchpad/internal/billing"
 	"launchpad/internal/marketplace"
 )
 
@@ -11,10 +13,38 @@ type memoryRepo struct {
 	templates     map[string]marketplace.Template
 	installations []marketplace.Installation
 	ratings       map[string]marketplace.Rating
+	purchases     map[string]marketplace.Purchase
 }
 
 func newRepo() *memoryRepo {
-	return &memoryRepo{templates: map[string]marketplace.Template{}, ratings: map[string]marketplace.Rating{}}
+	return &memoryRepo{
+		templates: map[string]marketplace.Template{},
+		ratings:   map[string]marketplace.Rating{},
+		purchases: map[string]marketplace.Purchase{},
+	}
+}
+func (r *memoryRepo) CreatePurchase(_ context.Context, item marketplace.Purchase) error {
+	r.purchases[item.Reference] = item
+	return nil
+}
+func (r *memoryRepo) GetPurchaseByReference(_ context.Context, organizationID, reference string) (marketplace.Purchase, error) {
+	item, ok := r.purchases[reference]
+	if !ok || item.OrganizationID != organizationID {
+		return marketplace.Purchase{}, marketplace.ErrNotFound
+	}
+	return item, nil
+}
+func (r *memoryRepo) UpdatePurchase(_ context.Context, item marketplace.Purchase) error {
+	r.purchases[item.Reference] = item
+	return nil
+}
+func (r *memoryRepo) HasPaidPurchase(_ context.Context, organizationID, templateID string) (bool, error) {
+	for _, item := range r.purchases {
+		if item.OrganizationID == organizationID && item.TemplateID == templateID && item.Status == marketplace.PurchasePaid {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 func (*memoryRepo) EnsureIndexes(context.Context) error { return nil }
 func (r *memoryRepo) Create(_ context.Context, item marketplace.Template) error {
@@ -69,6 +99,27 @@ func (i *installer) InstallMarketplaceTemplate(_ context.Context, _, _, _, _ str
 	return "journey-installed", nil
 }
 
+type paymentProvider struct{}
+
+func (paymentProvider) InitializeTransaction(
+	_ context.Context,
+	in billing.InitializeTransactionInput,
+) (billing.CheckoutSession, error) {
+	return billing.CheckoutSession{
+		AuthorizationURL: "https://checkout.example/" + in.Reference,
+		Reference:        in.Reference,
+	}, nil
+}
+
+func (paymentProvider) VerifyTransaction(
+	_ context.Context,
+	reference string,
+) (billing.VerifiedPayment, error) {
+	return billing.VerifiedPayment{
+		Reference: reference, AmountCents: 5000, Currency: "USD", Paid: true,
+	}, nil
+}
+
 func TestModerationVersionInstallAndRatings(t *testing.T) {
 	t.Parallel()
 	repo, install := newRepo(), &installer{}
@@ -100,6 +151,48 @@ func TestModerationVersionInstallAndRatings(t *testing.T) {
 	item, err = svc.NewVersion(ctx, item.ID, []marketplace.Step{{StepType: "document", Title: "Read handbook"}})
 	if err != nil || item.Version != 2 || item.Status != marketplace.StatusDraft || item.Featured {
 		t.Fatalf("version: %v (%+v)", err, item)
+	}
+}
+
+func TestPaidTemplateRequiresVerifiedPurchaseBeforeInstall(t *testing.T) {
+	t.Parallel()
+	repo, install := newRepo(), &installer{}
+	svc := marketplace.NewService(repo, install).
+		WithPayments(paymentProvider{}, "https://app.example/marketplace").
+		WithBuyerEmail(func(context.Context, string) (string, error) {
+			return "buyer@example.com", nil
+		})
+	item, err := svc.Create(context.Background(), marketplace.CreateInput{
+		Name: "Manager onboarding", Category: "leadership", CreatedBy: "seller-user",
+		SubmittedByOrganizationID: "seller-org", PriceCents: 5000, Currency: "USD",
+		Steps: []marketplace.Step{{StepType: "task", Title: "Meet the team"}},
+	})
+	if err != nil {
+		t.Fatalf("create paid template: %v", err)
+	}
+	item, err = svc.SetStatus(context.Background(), item.ID, marketplace.StatusPublished)
+	if err != nil {
+		t.Fatalf("publish paid template: %v", err)
+	}
+	if _, err = svc.Install(context.Background(), item.ID, "buyer-org", "buyer-user"); !errors.Is(err, marketplace.ErrPaymentRequired) {
+		t.Fatalf("install without purchase = %v, want payment required", err)
+	}
+	checkout, err := svc.BeginPurchase(
+		context.Background(), item.ID, "buyer-org", "buyer-user",
+	)
+	if err != nil || checkout.AuthorizationURL == "" {
+		t.Fatalf("begin purchase: %v (%+v)", err, checkout)
+	}
+	installation, err := svc.CompletePurchase(
+		context.Background(), checkout.Reference, "buyer-org", "buyer-user",
+	)
+	if err != nil || installation.TemplateID != item.ID || install.calls != 1 {
+		t.Fatalf("complete purchase: %v (%+v), calls=%d", err, installation, install.calls)
+	}
+	purchase := repo.purchases[checkout.Reference]
+	if purchase.Status != marketplace.PurchasePaid || purchase.PlatformFeeCents != 750 ||
+		purchase.SellerEarningsCents != 4250 {
+		t.Fatalf("purchase ledger = %+v", purchase)
 	}
 }
 
