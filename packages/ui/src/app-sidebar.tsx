@@ -55,7 +55,7 @@ export function AppSidebar({
       <p className="px-5 pt-5 font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--lp-sidebar-muted)]">
         {workspaceLabel}
       </p>
-      <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
+      <nav className="min-h-0 flex-1 touch-pan-y space-y-5 overflow-y-scroll overscroll-contain px-3 py-4 [-webkit-overflow-scrolling:touch] [scrollbar-gutter:stable]">
         {groups.map((group) => (
           <div key={group.heading}>
             <p className="mb-2 px-2 font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-white/35">
