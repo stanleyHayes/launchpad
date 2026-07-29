@@ -2063,6 +2063,10 @@ func registerOrgContentRoutes(
 		"/billing/subscription",
 		permit(permissions, roles.PermissionBillingRead, routeHandlers.billing.HandleOrgGetSubscription),
 	)
+	orgRoutes.Post(
+		"/billing/subscription",
+		permit(permissions, roles.PermissionBillingManage, routeHandlers.billing.HandleOrgSetSubscription),
+	)
 	orgRoutes.Get("/support/tickets", routeHandlers.support.HandleOrgList)
 	registerOrgRequestRoutes(orgRoutes, routeHandlers, permissions)
 	orgRoutes.Post("/support/tickets", routeHandlers.support.HandleOrgCreate)

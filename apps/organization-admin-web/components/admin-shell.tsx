@@ -49,7 +49,7 @@ export const orgAdminNav: RoleNavGroup[] = [
   {
     heading: "Account",
     items: [
-      { label: "Billing", href: "/billing", roles: ["organization_owner"] },
+      { label: "Billing", href: "/billing", icon: "credit-card", roles: ["organization_owner"] },
       { label: "Integrations", href: "/integrations", icon: "plug" },
       { label: "Support", href: "/support", icon: "message" },
       { label: "Settings", href: "/settings", icon: "settings" },

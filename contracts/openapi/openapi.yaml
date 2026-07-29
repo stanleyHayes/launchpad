@@ -793,6 +793,28 @@ paths:
       responses:
         "200":
           description: OK
+    post:
+      summary: Change the current organization subscription plan
+      description: Requires the owner-only billing.manage permission.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [planCode]
+              properties:
+                planCode:
+                  type: string
+      responses:
+        "200":
+          description: Updated subscription
+        "400":
+          description: Invalid or inactive plan
+        "403":
+          description: Missing billing.manage permission
   /billing/invoices:
     get:
       summary: List current organization invoices

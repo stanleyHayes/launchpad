@@ -330,6 +330,50 @@ func (h *Handler) HandleOrgGetSubscription(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, r, http.StatusOK, subscription.ToResponse())
 }
 
+// HandleOrgSetSubscription changes the current organization's plan.
+func (h *Handler) HandleOrgSetSubscription(w http.ResponseWriter, r *http.Request) {
+	principal, ok := requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+
+	var body struct {
+		PlanCode string `json:"planCode"`
+	}
+	if err := httpx.DecodeJSON(r, &body); err != nil {
+		writeError(w, r, http.StatusBadRequest, "INVALID_JSON", "Request body is invalid")
+
+		return
+	}
+
+	subscription, err := h.svc.SetOrganizationPlan(r.Context(), SetOrganizationPlanInput{
+		OrganizationID: principal.OrganizationID,
+		PlanCode:       body.PlanCode,
+	})
+	if err != nil {
+		writeBillingError(w, r, err)
+
+		return
+	}
+
+	if err := h.audit.Record(
+		r.Context(),
+		&principal.OrganizationID,
+		principal.UserID,
+		"subscription.updated",
+		"subscription",
+		subscription.ID,
+		map[string]any{"planCode": subscription.PlanCode, "status": subscription.Status},
+	); err != nil {
+		slog.ErrorContext(r.Context(), "audit organization subscription update failed", "error", err)
+		writeError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Unable to record audit event")
+
+		return
+	}
+
+	writeJSON(w, r, http.StatusOK, subscription.ToResponse())
+}
+
 // HandleOrgListInvoices lists the current organization's invoices.
 func (h *Handler) HandleOrgListInvoices(w http.ResponseWriter, r *http.Request) {
 	principal, ok := requirePrincipal(w, r)

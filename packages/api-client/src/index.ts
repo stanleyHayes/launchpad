@@ -2431,6 +2431,13 @@ export function createLaunchPadClient(options: LaunchPadClientOptions) {
       return request("/api/v1/billing/subscription", { method: "GET" }, subscriptionSchema);
     },
 
+    updateBillingSubscription(payload: SetOrganizationSubscriptionRequest): Promise<Subscription> {
+      return request("/api/v1/billing/subscription", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }, subscriptionSchema);
+    },
+
     listSupportTickets(): Promise<SupportTicket[]> {
       return request("/api/v1/support/tickets", { method: "GET" }, z.array(supportTicketSchema));
     },
