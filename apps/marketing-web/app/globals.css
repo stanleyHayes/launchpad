@@ -90,3 +90,31 @@ body {
   transform: translateY(-4px);
   box-shadow: var(--lp-shadow-hover);
 }
+
+/* Product evidence ------------------------------------------------------- */
+.lp-evidence__frame {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--lp-border) 82%, transparent);
+  border-radius: 1rem;
+  background: var(--lp-paper-elevated);
+  box-shadow:
+    0 30px 80px rgba(11, 27, 51, 0.16),
+    0 4px 18px rgba(11, 27, 51, 0.08);
+}
+
+.lp-hero .lp-evidence__frame {
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow:
+    0 38px 100px rgba(4, 14, 30, 0.46),
+    0 8px 24px rgba(4, 14, 30, 0.22);
+}
+
+.lp-evidence--offset {
+  transform: rotate(0.6deg);
+}
+
+@media (max-width: 767px) {
+  .lp-evidence--offset {
+    transform: none;
+  }
+}

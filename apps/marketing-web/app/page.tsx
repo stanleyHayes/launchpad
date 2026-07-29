@@ -5,6 +5,7 @@ import { buildMetadata } from "../lib/seo";
 import { FeatureCard } from "./feature-card";
 import { Icon, type IconName } from "./ui-icon";
 import { ProductPreview } from "./product-preview";
+import { ProductEvidence } from "./product-evidence";
 import { SiteFooter } from "./site-footer";
 import { SiteHeader } from "./site-header";
 
@@ -178,6 +179,24 @@ export default function HomePage() {
         </Container>
       </section>
 
+      {/* Product proof ---------------------------------------------------- */}
+      <section className="py-24">
+        <Container>
+          <div className="max-w-2xl">
+            <h2
+              className="text-3xl font-semibold tracking-tight text-[var(--lp-ink)] md:text-5xl"
+              style={{ fontFamily: "var(--lp-font-display)" }}
+            >
+              See the work. Then see where it needs help.
+            </h2>
+            <p className="mt-4 text-lg leading-8 text-[var(--lp-ink-muted)]">
+              Managers get a live operating view of progress, blockers, approvals, and upcoming conversations.
+            </p>
+          </div>
+          <ProductEvidence kind="manager" className="mt-12 lp-evidence--offset" />
+        </Container>
+      </section>
+
       {/* How it works ------------------------------------------------------ */}
       <section className="bg-[var(--lp-paper-elevated)] py-24">
         <Container>
@@ -208,6 +227,28 @@ export default function HomePage() {
               </div>
             ))}
           </div>
+        </Container>
+      </section>
+
+      {/* Grounded answers -------------------------------------------------- */}
+      <section className="py-24">
+        <Container className="grid items-center gap-12 lg:grid-cols-[0.72fr_1.28fr]">
+          <div>
+            <h2
+              className="text-3xl font-semibold tracking-tight text-[var(--lp-ink)] md:text-5xl"
+              style={{ fontFamily: "var(--lp-font-display)" }}
+            >
+              Answers employees can verify.
+            </h2>
+            <p className="mt-5 text-lg leading-8 text-[var(--lp-ink-muted)]">
+              LaunchPad cites approved company sources and keeps a human escalation path close.
+            </p>
+            <Link href="/features/knowledge-assistant" className="mt-7 inline-flex font-semibold text-[var(--lp-brand)]">
+              Explore the knowledge assistant
+              <Icon name="arrow-right" className="ml-2 h-4 w-4" />
+            </Link>
+          </div>
+          <ProductEvidence kind="assistant" caption={false} />
         </Container>
       </section>
 
