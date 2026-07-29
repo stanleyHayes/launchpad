@@ -27,10 +27,82 @@ function formatPrice(cents: number, currency: string): string {
   }).format(cents / 100);
 }
 
-function featuresFrom(value: string): string[] {
-  return Array.from(new Set(
-    value.split(",").map((feature) => feature.trim()).filter(Boolean),
-  ));
+const planFeatureOptions = [
+  { code: "core_onboarding", label: "Core onboarding", description: "Journeys, assignments, and employee progress" },
+  { code: "analytics", label: "Analytics", description: "Cohorts, completion, and onboarding insights" },
+  { code: "sso", label: "SSO & SCIM", description: "Enterprise identity and directory provisioning" },
+  { code: "support_sla", label: "SLA support", description: "Priority support and response commitments" },
+] as const;
+
+function FeaturePicker({
+  value,
+  onChange,
+}: {
+  value: string[];
+  onChange: (features: string[]) => void;
+}) {
+  function toggle(code: string) {
+    onChange(
+      value.includes(code)
+        ? value.filter((feature) => feature !== code)
+        : [...value, code],
+    );
+  }
+
+  return (
+    <fieldset className="sm:col-span-2">
+      <legend className="text-sm font-semibold">Plan features</legend>
+      <p className="mt-1 text-xs text-[var(--lp-ink-muted)]">
+        Select the capabilities included in this plan.
+      </p>
+      {value.length > 0 ? (
+        <div className="mt-3 flex flex-wrap gap-2" aria-label="Selected plan features">
+          {value.map((code) => {
+            const option = planFeatureOptions.find((item) => item.code === code);
+            return (
+              <button
+                key={code}
+                type="button"
+                className="inline-flex items-center gap-2 rounded-[var(--lp-radius-input)] bg-[var(--lp-accent)] px-3 py-2 text-xs font-semibold text-white shadow-[0_8px_18px_rgba(22,56,110,0.2)]"
+                aria-label={`Remove ${option?.label ?? code}`}
+                onClick={() => toggle(code)}
+              >
+                {option?.label ?? code}
+                <span aria-hidden="true">×</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="mt-3 rounded-[var(--lp-radius-input)] bg-[var(--lp-paper)] px-3 py-2 text-xs text-[var(--lp-ink-muted)] shadow-[var(--lp-shadow-inset)]">
+          No features selected
+        </p>
+      )}
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {planFeatureOptions.map((option) => {
+          const selected = value.includes(option.code);
+          return (
+            <button
+              key={option.code}
+              type="button"
+              aria-pressed={selected}
+              className={`rounded-[var(--lp-radius-input)] border p-3 text-left transition ${
+                selected
+                  ? "border-[var(--lp-accent)] bg-[color-mix(in_srgb,var(--lp-accent)_8%,var(--lp-paper))]"
+                  : "border-[var(--lp-border)] bg-[var(--lp-paper-elevated)] hover:border-[var(--lp-accent)]"
+              }`}
+              onClick={() => toggle(option.code)}
+            >
+              <span className="block text-sm font-semibold">{option.label}</span>
+              <span className="mt-1 block text-xs leading-5 text-[var(--lp-ink-muted)]">
+                {option.description}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
 }
 
 export default function BillingPage() {
@@ -43,8 +115,10 @@ export default function BillingPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [createActive, setCreateActive] = useState(true);
+  const [createFeatures, setCreateFeatures] = useState<string[]>(["core_onboarding"]);
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   const [editingActive, setEditingActive] = useState(true);
+  const [editingFeatures, setEditingFeatures] = useState<string[]>([]);
 
   function reload(isStale?: () => boolean) {
     startTransition(() => {
@@ -107,11 +181,12 @@ export default function BillingPage() {
         description: formString(form, "description"),
         priceMonthlyCents: Math.round(Number(formString(form, "monthlyPrice") || "0") * 100),
         currency: formString(form, "currency") || "USD",
-        features: featuresFrom(formString(form, "features")),
+        features: createFeatures,
         active: createActive,
       }).then((plan) => {
         formEl.reset();
         setCreateActive(true);
+        setCreateFeatures(["core_onboarding"]);
         setMessage(`${plan.name} plan created`);
         reload();
       }).catch((err: unknown) => {
@@ -132,7 +207,7 @@ export default function BillingPage() {
         description: formString(form, "description"),
         priceMonthlyCents: Math.round(Number(formString(form, "monthlyPrice") || "0") * 100),
         currency: formString(form, "currency") || "USD",
-        features: featuresFrom(formString(form, "features")),
+        features: editingFeatures,
         active: editingActive,
       }).then((plan) => {
         setEditingPlan(null);
@@ -147,6 +222,7 @@ export default function BillingPage() {
   function beginEditing(plan: Plan) {
     setEditingPlan(plan);
     setEditingActive(plan.active);
+    setEditingFeatures(plan.features);
     setError(null);
     setMessage(null);
   }
@@ -299,17 +375,7 @@ export default function BillingPage() {
                   placeholder="For established teams scaling onboarding operations"
                 />
               </label>
-              <label className="text-sm font-semibold md:col-span-2">
-                Feature codes
-                <input
-                  className="lp-input mt-1.5"
-                  name="features"
-                  placeholder="core_onboarding, analytics, sso"
-                />
-                <span className="mt-1 block text-xs font-normal text-[var(--lp-ink-muted)]">
-                  Separate feature identifiers with commas.
-                </span>
-              </label>
+              <FeaturePicker value={createFeatures} onChange={setCreateFeatures} />
               <div className="flex items-center gap-3 md:col-span-2">
                 <ToggleSwitch
                   checked={createActive}
@@ -456,14 +522,6 @@ export default function BillingPage() {
                               <option value="NGN">NGN — Nigerian naira</option>
                             </Select>
                           </label>
-                          <label className="text-sm font-semibold">
-                            Feature codes
-                            <input
-                              className="lp-input mt-1.5"
-                              name="features"
-                              defaultValue={plan.features.join(", ")}
-                            />
-                          </label>
                           <label className="text-sm font-semibold sm:col-span-2">
                             Description
                             <textarea
@@ -472,27 +530,36 @@ export default function BillingPage() {
                               defaultValue={plan.description}
                             />
                           </label>
-                          <div className="flex items-center gap-3">
-                            <ToggleSwitch
-                              checked={editingActive}
-                              onChange={setEditingActive}
-                              label={`${plan.name} active status`}
-                            />
-                            <span className="text-sm font-semibold">
-                              {editingActive ? "Active" : "Inactive"}
-                            </span>
-                          </div>
-                          <div className="flex justify-end gap-2">
-                            <button
-                              type="button"
-                              className="lp-btn lp-btn--quiet"
-                              onClick={() => setEditingPlan(null)}
-                            >
-                              Cancel
-                            </button>
-                            <button className="lp-btn lp-btn--primary" disabled={pending}>
-                              {pending ? "Saving…" : "Save changes"}
-                            </button>
+                          <FeaturePicker
+                            value={editingFeatures}
+                            onChange={setEditingFeatures}
+                          />
+                          <div className="flex flex-wrap items-center justify-between gap-4 sm:col-span-2">
+                            <div className="flex min-w-0 items-center gap-3">
+                              <ToggleSwitch
+                                checked={editingActive}
+                                onChange={setEditingActive}
+                                label={`${plan.name} active status`}
+                              />
+                              <span className="whitespace-nowrap text-sm font-semibold">
+                                {editingActive ? "Active plan" : "Inactive plan"}
+                              </span>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-2">
+                              <button
+                                type="button"
+                                className="lp-btn lp-btn--quiet whitespace-nowrap"
+                                onClick={() => setEditingPlan(null)}
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                className="lp-btn lp-btn--primary whitespace-nowrap"
+                                disabled={pending}
+                              >
+                                {pending ? "Saving…" : "Save changes"}
+                              </button>
+                            </div>
                           </div>
                         </form>
                       ) : null}

@@ -19,6 +19,7 @@ export function ToggleSwitch({
       role="switch"
       aria-checked={checked}
       aria-label={label}
+      style={{ width: 44, height: 24, flex: "0 0 44px" }}
       onClick={() => {
         onChange(!checked);
       }}
@@ -27,9 +28,12 @@ export function ToggleSwitch({
       }`}
     >
       <span
-        className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-          checked ? "translate-x-[1.375rem]" : "translate-x-0.5"
-        }`}
+        className="absolute left-0 top-0.5 rounded-full bg-white shadow transition-transform"
+        style={{
+          width: 20,
+          height: 20,
+          transform: checked ? "translateX(22px)" : "translateX(2px)",
+        }}
       />
     </button>
   );
