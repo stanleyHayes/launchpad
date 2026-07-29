@@ -17,6 +17,10 @@ const credentials = {
 
 let accessToken = "";
 
+function dateOnly(timestamp = Date.now()) {
+  return new Date(timestamp).toISOString().slice(0, 10);
+}
+
 async function request(path, { method = "GET", body, allow = [] } = {}) {
   const response = await fetch(`${apiBaseUrl}${path}`, {
     method,
@@ -264,7 +268,7 @@ async function ensureSupportTicket() {
       subject: "Laptop delivery timing",
       body: "The new starter begins next Monday. Please confirm the laptop delivery and setup window.",
       priority: "high",
-      category: "equipment",
+      category: "it",
     },
   });
 }
@@ -299,7 +303,7 @@ async function main() {
     jobRoleId: engineeringManager.id,
     team: "Platform",
     location: "Accra",
-    startDate: new Date(Date.now() - 60 * 86_400_000).toISOString(),
+    startDate: dateOnly(Date.now() - 60 * 86_400_000),
   }, credentials.manager.password);
 
   const employee = await ensureEmployee({
@@ -314,7 +318,7 @@ async function main() {
     buddyEmployeeId: manager.id,
     team: "Platform",
     location: "Remote, Ghana",
-    startDate: new Date().toISOString(),
+    startDate: dateOnly(),
   }, credentials.employee.password);
 
   const secondEmployee = await ensureEmployee({
@@ -329,7 +333,7 @@ async function main() {
     buddyEmployeeId: employee.id,
     team: "Employee Experience",
     location: "Kumasi",
-    startDate: new Date(Date.now() + 5 * 86_400_000).toISOString(),
+    startDate: dateOnly(Date.now() + 5 * 86_400_000),
   }, "LaunchPadDemo!2026");
 
   const journey = await ensureJourney();

@@ -216,7 +216,10 @@ func (s *Store) ProvisionAccess(ctx context.Context, organizationID, employeeID,
 	res, err := s.col.UpdateOne(ctx, bson.M{
 		fieldID:             employeeID,
 		fieldOrganizationID: organizationID,
-		fieldUserID:         "",
+		"$or": bson.A{
+			bson.M{fieldUserID: ""},
+			bson.M{fieldUserID: bson.M{"$exists": false}},
+		},
 	}, bson.M{"$set": bson.M{
 		fieldUserID:    userID,
 		fieldStatus:    statusActive,
