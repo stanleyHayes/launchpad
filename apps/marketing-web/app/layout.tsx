@@ -5,6 +5,7 @@ import { siteUrl } from "./env";
 import { buildMetadata, siteName } from "../lib/seo";
 import "./globals.css";
 import { PrivacyControls } from "./privacy-controls";
+import { MarketingMotion } from "./marketing-motion";
 import { Suspense } from "react";
 
 const outfit = Outfit({
@@ -53,7 +54,7 @@ export default function RootLayout({
         />
       </head>
       <body suppressHydrationWarning className={`${outfit.variable} antialiased`}>
-        {children}
+        <MarketingMotion>{children}</MarketingMotion>
         <Suspense fallback={null}>
           <PrivacyControls />
         </Suspense>

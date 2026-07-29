@@ -90,36 +90,52 @@ export function AppSidebar({
             <ul className="lp-nav-branch space-y-1">
               {group.items.map((item) => {
                 const active = isActive(pathname, item.href);
+                const content = (
+                  <>
+                    {item.icon ? (
+                      <span className="lp-nav-node">
+                        <Icon name={item.icon} className="h-3.5 w-3.5" />
+                      </span>
+                    ) : null}
+                    {!collapsed ? <span className="min-w-0 flex-1 truncate">{item.label}</span> : null}
+                    {!collapsed && item.badge !== undefined && item.badge > 0 ? (
+                      <span className="lp-nav-badge">
+                        {item.badge > 99 ? "99+" : item.badge}
+                      </span>
+                    ) : active && !collapsed ? (
+                      <span className="lp-nav-dot" aria-hidden="true" />
+                    ) : null}
+                  </>
+                );
+                const itemClassName = cn(
+                  "lp-nav-item w-full text-left",
+                  collapsed && "justify-center px-2",
+                  active && "lp-nav-item--active",
+                );
                 return (
                   <li key={item.href}>
-                    <a
-                      href={item.href}
-                      title={collapsed ? item.label : undefined}
-                      aria-label={collapsed ? item.label : undefined}
-                      aria-current={active ? "page" : undefined}
-                      onClick={(event) => {
-                        if (!onNavigate) {
-                          return;
-                        }
-                        event.preventDefault();
-                        onNavigate(item.href);
-                      }}
-                      className={cn("lp-nav-item", collapsed && "justify-center px-2", active && "lp-nav-item--active")}
-                    >
-                      {item.icon ? (
-                        <span className="lp-nav-node">
-                          <Icon name={item.icon} className="h-3.5 w-3.5" />
-                        </span>
-                      ) : null}
-                      {!collapsed ? <span className="min-w-0 flex-1 truncate">{item.label}</span> : null}
-                      {!collapsed && item.badge !== undefined && item.badge > 0 ? (
-                        <span className="lp-nav-badge">
-                          {item.badge > 99 ? "99+" : item.badge}
-                        </span>
-                      ) : active && !collapsed ? (
-                        <span className="lp-nav-dot" aria-hidden="true" />
-                      ) : null}
-                    </a>
+                    {onNavigate ? (
+                      <button
+                        type="button"
+                        title={collapsed ? item.label : undefined}
+                        aria-label={collapsed ? item.label : undefined}
+                        aria-current={active ? "page" : undefined}
+                        onClick={() => onNavigate(item.href)}
+                        className={itemClassName}
+                      >
+                        {content}
+                      </button>
+                    ) : (
+                      <a
+                        href={item.href}
+                        title={collapsed ? item.label : undefined}
+                        aria-label={collapsed ? item.label : undefined}
+                        aria-current={active ? "page" : undefined}
+                        className={itemClassName}
+                      >
+                        {content}
+                      </a>
+                    )}
                   </li>
                 );
               })}

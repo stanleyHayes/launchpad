@@ -15,6 +15,42 @@ body {
   font-family: var(--lp-font-body);
 }
 
+.lp-marketing-route {
+  animation: lp-marketing-route-in 360ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+@keyframes lp-marketing-route-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@supports (animation-timeline: view()) {
+  .lp-marketing-route main > section:not(:first-child),
+  .lp-marketing-route main > article,
+  .lp-marketing-route .lp-legal-section {
+    animation: lp-marketing-section-in linear both;
+    animation-timeline: view();
+    animation-range: entry 5% cover 24%;
+  }
+}
+
+@keyframes lp-marketing-section-in {
+  from {
+    opacity: 0.2;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* Entrance animations ----------------------------------------------------- */
 @keyframes lp-rise {
   from {
@@ -40,6 +76,13 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .lp-marketing-route,
+  .lp-marketing-route main > section,
+  .lp-marketing-route main > article,
+  .lp-marketing-route .lp-legal-section {
+    animation: none;
+  }
+
   .lp-rise,
   .lp-rise-delay,
   .lp-rise-delay-2 {

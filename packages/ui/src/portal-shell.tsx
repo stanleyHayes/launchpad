@@ -203,7 +203,10 @@ export function PortalShell({
           </div>
         </header>
         <main className="lp-portal-workspace h-0 min-h-0 flex-1 touch-pan-y overflow-x-hidden overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]">
-          <div className="mx-auto w-full max-w-[var(--lp-max)] px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6 md:px-8 md:pb-8 md:pt-8">
+          <div
+            key={pathname}
+            className="lp-route-content mx-auto w-full max-w-[var(--lp-max)] px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6 md:px-8 md:pb-8 md:pt-8"
+          >
             {children}
           </div>
         </main>
