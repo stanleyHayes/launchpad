@@ -95,6 +95,27 @@ func TestCreateRejectsEmployeeAbovePlanLimit(t *testing.T) {
 	}
 }
 
+func TestEmployeeCanUpdateOwnMobilePhone(t *testing.T) {
+	t.Parallel()
+	repo := newMemoryRepo()
+	repo.items["employee-1"] = employees.Employee{
+		ID: "employee-1", OrganizationID: "org-1", UserID: "user-1",
+		MobilePhone: "+233200000000",
+	}
+	svc := employees.NewService(repo, noopReferences{})
+
+	updated, err := svc.UpdateSelf(context.Background(), "org-1", "user-1", "+233244123456")
+	if err != nil {
+		t.Fatalf("update own profile: %v", err)
+	}
+	if updated.MobilePhone != "+233244123456" {
+		t.Fatalf("mobile phone = %q", updated.MobilePhone)
+	}
+	if _, err := svc.UpdateSelf(context.Background(), "org-1", "user-1", "0244123456"); !errors.Is(err, employees.ErrInvalidInput) {
+		t.Fatalf("local phone format = %v, want invalid input", err)
+	}
+}
+
 // memoryRepo is an in-memory employees.Repository.
 type memoryRepo struct {
 	items          map[string]employees.Employee

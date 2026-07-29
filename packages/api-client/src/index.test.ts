@@ -532,7 +532,19 @@ describe("org support ticket endpoints", () => {
 
 describe("MFA endpoints", () => {
   const authPayload = {
-    user: { id: "u-1", email: "owner@acme.test", displayName: "Owner", status: "active" },
+    user: {
+      id: "u-1",
+      email: "owner@acme.test",
+      displayName: "Owner",
+      status: "active",
+      preferences: {
+        emailNotifications: true,
+        inAppNotifications: true,
+        digestFrequency: "daily",
+        locale: "en",
+        timezone: "UTC",
+      },
+    },
     organization: null,
     tokens: { accessToken: "a", refreshToken: "r", tokenType: "Bearer", expiresIn: 900 },
   };

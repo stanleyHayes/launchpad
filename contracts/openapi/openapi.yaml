@@ -109,6 +109,74 @@ paths:
       responses:
         "200":
           description: OK
+    patch:
+      summary: Update the authenticated user's display profile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [displayName]
+              properties:
+                displayName: { type: string, minLength: 2, maxLength: 100 }
+      responses:
+        "200": { description: Updated user profile }
+  /auth/preferences:
+    put:
+      summary: Persist the authenticated user's notification and regional preferences
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserPreferences"
+      responses:
+        "200": { description: Updated preferences }
+  /auth/password/change:
+    post:
+      summary: Change password after verifying the current password and revoke all sessions
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string }
+                newPassword: { type: string, minLength: 10 }
+      responses:
+        "200": { description: Password changed; re-authentication required }
+  /me/profile:
+    get:
+      summary: Get the authenticated user's linked employee record
+      security:
+        - bearerAuth: []
+      responses:
+        "200": { description: Employee profile }
+    patch:
+      summary: Update employee-owned contact information
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mobilePhone:
+                  type: string
+                  description: International format including the leading plus sign
+      responses:
+        "200": { description: Updated employee profile }
   /auth/organizations:
     get:
       summary: List active organization memberships available to the current user
@@ -2213,6 +2281,15 @@ components:
       scheme: bearer
       bearerFormat: JWT
   schemas:
+    UserPreferences:
+      type: object
+      required: [emailNotifications, inAppNotifications, digestFrequency, locale, timezone]
+      properties:
+        emailNotifications: { type: boolean }
+        inAppNotifications: { type: boolean }
+        digestFrequency: { type: string, enum: [instant, daily, weekly, off] }
+        locale: { type: string, enum: [en, fr] }
+        timezone: { type: string }
     Organization:
       type: object
       required: [id, name, slug, status, planCode, timezone, createdAt, updatedAt]

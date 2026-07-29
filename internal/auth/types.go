@@ -56,14 +56,23 @@ const (
 
 // User is an authenticated platform user.
 type User struct {
-	ID           string    `bson:"_id"          json:"id"`
-	Email        string    `bson:"email"        json:"email"`
-	DisplayName  string    `bson:"displayName"  json:"displayName"`
-	PasswordHash string    `bson:"passwordHash" json:"-"`
-	Status       string    `bson:"status"       json:"status"`
-	MFAEnabled   bool      `bson:"mfaEnabled"   json:"mfaEnabled"`
-	CreatedAt    time.Time `bson:"createdAt"    json:"createdAt"`
-	UpdatedAt    time.Time `bson:"updatedAt"    json:"updatedAt"`
+	ID           string          `bson:"_id"          json:"id"`
+	Email        string          `bson:"email"        json:"email"`
+	DisplayName  string          `bson:"displayName"  json:"displayName"`
+	PasswordHash string          `bson:"passwordHash" json:"-"`
+	Status       string          `bson:"status"       json:"status"`
+	MFAEnabled   bool            `bson:"mfaEnabled"   json:"mfaEnabled"`
+	Preferences  UserPreferences `bson:"preferences" json:"preferences"`
+	CreatedAt    time.Time       `bson:"createdAt"    json:"createdAt"`
+	UpdatedAt    time.Time       `bson:"updatedAt"    json:"updatedAt"`
+}
+
+type UserPreferences struct {
+	EmailNotifications bool   `bson:"emailNotifications" json:"emailNotifications"`
+	InAppNotifications bool   `bson:"inAppNotifications" json:"inAppNotifications"`
+	DigestFrequency    string `bson:"digestFrequency" json:"digestFrequency"`
+	Locale             string `bson:"locale" json:"locale"`
+	Timezone           string `bson:"timezone" json:"timezone"`
 }
 
 // Invitation is a pending account-activation grant, stored with its token
@@ -93,10 +102,11 @@ type PasswordReset struct {
 
 // UserPublic is the API-safe user representation.
 type UserPublic struct {
-	ID          string `json:"id"`
-	Email       string `json:"email"`
-	DisplayName string `json:"displayName"`
-	Status      string `json:"status"`
+	ID          string          `json:"id"`
+	Email       string          `json:"email"`
+	DisplayName string          `json:"displayName"`
+	Status      string          `json:"status"`
+	Preferences UserPreferences `json:"preferences"`
 }
 
 // OrganizationPublic is the API-safe organization representation returned by
@@ -155,12 +165,29 @@ type TokenPair struct {
 }
 
 func toPublic(user User) UserPublic {
+	preferences := normalizedPreferences(user.Preferences)
 	return UserPublic{
 		ID:          user.ID,
 		Email:       user.Email,
 		DisplayName: user.DisplayName,
 		Status:      user.Status,
+		Preferences: preferences,
 	}
+}
+
+func normalizedPreferences(preferences UserPreferences) UserPreferences {
+	if preferences.DigestFrequency == "" {
+		preferences.EmailNotifications = true
+		preferences.InAppNotifications = true
+		preferences.DigestFrequency = "daily"
+	}
+	if preferences.Locale == "" {
+		preferences.Locale = "en"
+	}
+	if preferences.Timezone == "" {
+		preferences.Timezone = "UTC"
+	}
+	return preferences
 }
 
 func toOrganizationPublic(org organizations.Organization) OrganizationPublic {

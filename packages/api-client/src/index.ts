@@ -11,11 +11,26 @@ const envelopeSchema = <T extends z.ZodTypeAny>(dataSchema: T) =>
       .optional(),
   });
 
+export const userPreferencesSchema = z.object({
+  emailNotifications: z.boolean(),
+  inAppNotifications: z.boolean(),
+  digestFrequency: z.enum(["instant", "daily", "weekly", "off"]),
+  locale: z.enum(["en", "fr"]),
+  timezone: z.string(),
+});
+
 export const userSchema = z.object({
   id: z.string(),
   email: z.string().email(),
   displayName: z.string(),
   status: z.string(),
+  preferences: userPreferencesSchema.default({
+    emailNotifications: true,
+    inAppNotifications: true,
+    digestFrequency: "daily",
+    locale: "en",
+    timezone: "UTC",
+  }),
 });
 
 export const brandingSchema = z.object({
@@ -262,6 +277,7 @@ export const employeeSchema = z.object({
 });
 
 export type User = z.infer<typeof userSchema>;
+export type UserPreferences = z.infer<typeof userPreferencesSchema>;
 export type Organization = z.infer<typeof organizationSchema>;
 export type OrganizationPage = z.infer<typeof organizationPageSchema>;
 export type EntitlementUsageItem = z.infer<typeof entitlementUsageItemSchema>;
@@ -1780,6 +1796,27 @@ export function createLaunchPadClient(options: LaunchPadClientOptions) {
       return request("/api/v1/auth/me", { method: "GET" }, meSchema);
     },
 
+    updateMyProfile(displayName: string): Promise<User> {
+      return request("/api/v1/auth/me", {
+        method: "PATCH",
+        body: JSON.stringify({ displayName }),
+      }, userSchema);
+    },
+
+    updateMyPreferences(preferences: UserPreferences): Promise<UserPreferences> {
+      return request("/api/v1/auth/preferences", {
+        method: "PUT",
+        body: JSON.stringify(preferences),
+      }, userPreferencesSchema);
+    },
+
+    changeMyPassword(currentPassword: string, newPassword: string): Promise<{ status: string }> {
+      return request("/api/v1/auth/password/change", {
+        method: "POST",
+        body: JSON.stringify({ currentPassword, newPassword }),
+      }, z.object({ status: z.string() }));
+    },
+
     meWithToken(accessToken: string): Promise<MeResponse> {
       return request(
         "/api/v1/auth/me",
@@ -1877,6 +1914,17 @@ export function createLaunchPadClient(options: LaunchPadClientOptions) {
 
     listMyContacts(): Promise<EmployeeContact[]> {
       return request("/api/v1/me/contacts", { method: "GET" }, z.array(employeeContactSchema));
+    },
+
+    getMyEmployeeProfile(): Promise<Employee> {
+      return request("/api/v1/me/profile", { method: "GET" }, employeeSchema);
+    },
+
+    updateMyEmployeeProfile(mobilePhone: string): Promise<Employee> {
+      return request("/api/v1/me/profile", {
+        method: "PATCH",
+        body: JSON.stringify({ mobilePhone }),
+      }, employeeSchema);
     },
 
     createEmployee(payload: CreateEmployeeRequest): Promise<Employee> {

@@ -162,6 +162,34 @@ func (s *Service) Count(ctx context.Context, organizationID string) (int64, erro
 	return count, nil
 }
 
+func (s *Service) ProfileForUser(ctx context.Context, organizationID, userID string) (Employee, error) {
+	employee, err := s.repo.GetByUserID(ctx, organizationID, userID)
+	if err != nil {
+		return Employee{}, fmt.Errorf("get employee profile: %w", err)
+	}
+	return employee, nil
+}
+
+func (s *Service) UpdateSelf(
+	ctx context.Context,
+	organizationID, userID, mobilePhone string,
+) (Employee, error) {
+	employee, err := s.repo.GetByUserID(ctx, organizationID, userID)
+	if err != nil {
+		return Employee{}, fmt.Errorf("get employee profile: %w", err)
+	}
+	mobilePhone = strings.TrimSpace(mobilePhone)
+	if mobilePhone != "" && (!strings.HasPrefix(mobilePhone, "+") || len(mobilePhone) < 8) {
+		return Employee{}, ErrInvalidInput
+	}
+	employee.MobilePhone = mobilePhone
+	employee.UpdatedAt = time.Now().UTC()
+	if err := s.repo.Update(ctx, employee); err != nil {
+		return Employee{}, fmt.Errorf("update employee profile: %w", err)
+	}
+	return employee, nil
+}
+
 func (s *Service) ContactsForUser(
 	ctx context.Context, organizationID, userID string,
 ) ([]Contact, error) {

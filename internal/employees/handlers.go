@@ -91,6 +91,51 @@ func (h *Handler) HandleMyContacts(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, r, http.StatusOK, contacts)
 }
 
+func (h *Handler) HandleMyProfile(w http.ResponseWriter, r *http.Request) {
+	principal, ok := security.PrincipalFromContext(r.Context())
+	if !ok {
+		writeError(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+	employee, err := h.svc.ProfileForUser(r.Context(), principal.OrganizationID, principal.UserID)
+	if err != nil {
+		writeEmployeeError(w, r, err)
+		return
+	}
+	writeJSON(w, r, http.StatusOK, employee)
+}
+
+func (h *Handler) HandleUpdateMyProfile(w http.ResponseWriter, r *http.Request) {
+	principal, ok := security.PrincipalFromContext(r.Context())
+	if !ok {
+		writeError(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+	var body struct {
+		MobilePhone string `json:"mobilePhone"`
+	}
+	if err := httpx.DecodeJSON(r, &body); err != nil {
+		writeError(w, r, http.StatusBadRequest, "INVALID_JSON", "Request body is invalid")
+		return
+	}
+	employee, err := h.svc.UpdateSelf(
+		r.Context(), principal.OrganizationID, principal.UserID, body.MobilePhone,
+	)
+	if err != nil {
+		writeEmployeeError(w, r, err)
+		return
+	}
+	if err := h.audit.Record(
+		r.Context(), &principal.OrganizationID, principal.UserID,
+		"employee.profile_updated", "employee", employee.ID, nil,
+	); err != nil {
+		slog.ErrorContext(r.Context(), "audit employee profile update", "error", err)
+		writeError(w, r, http.StatusInternalServerError, "AUDIT_FAILED", "Profile updated but audit recording failed")
+		return
+	}
+	writeJSON(w, r, http.StatusOK, employee)
+}
+
 // HandleCreate creates an employee.
 // Authorization is enforced by the route-level RequirePermission
 // (employees.create); the handler only needs the authenticated principal.

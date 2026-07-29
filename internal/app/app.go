@@ -1503,6 +1503,9 @@ func registerPrivateRoutes(
 		private.Post("/auth/mfa/confirm", routeHandlers.auth.HandleMFAConfirm)
 		private.Post("/auth/mfa/disable", routeHandlers.auth.HandleMFADisable)
 		private.Get("/auth/me", routeHandlers.auth.HandleMe)
+		private.Patch("/auth/me", routeHandlers.auth.HandleUpdateProfile)
+		private.Put("/auth/preferences", routeHandlers.auth.HandleUpdatePreferences)
+		private.Post("/auth/password/change", routeHandlers.auth.HandleChangePassword)
 		private.Get("/auth/organizations", routeHandlers.auth.HandleListOrganizations)
 		private.Post("/auth/switch-organization", routeHandlers.auth.HandleSwitchOrganization)
 
@@ -1834,6 +1837,8 @@ func registerOrgPeopleRoutes(
 
 	orgRoutes.Get("/employees", routeHandlers.employees.HandleList)
 	orgRoutes.Get("/me/contacts", routeHandlers.employees.HandleMyContacts)
+	orgRoutes.Get("/me/profile", routeHandlers.employees.HandleMyProfile)
+	orgRoutes.Patch("/me/profile", routeHandlers.employees.HandleUpdateMyProfile)
 	orgRoutes.Post("/employees/import", permit(permissions, roles.PermissionEmployeesCreate, routeHandlers.employees.HandleImportCSV))
 	orgRoutes.Post(
 		"/employees",

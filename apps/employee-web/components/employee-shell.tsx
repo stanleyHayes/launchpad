@@ -213,7 +213,7 @@ export function EmployeeShell({ children }: { children: ReactNode }) {
         { icon: "check", label: "My assignments", caption: "Your onboarding journey", href: "/" },
         { icon: "message", label: "Support", caption: "Tickets with HR and IT", href: "/support" },
         { icon: "bell", label: "Notifications", caption: "Updates and approvals", href: "/notifications" },
-        { icon: "settings", label: "Settings", caption: "Profile and appearance", href: "/settings" },
+        { icon: "settings", label: "Settings", caption: "Profile, security and preferences", href: "/settings" },
       ]}
     >
       {children}

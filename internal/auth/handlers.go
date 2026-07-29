@@ -267,6 +267,75 @@ func (h *Handler) HandleMe(w http.ResponseWriter, r *http.Request) {
 	writeHTTPJSON(w, r, http.StatusOK, me)
 }
 
+func (h *Handler) HandleUpdateProfile(w http.ResponseWriter, r *http.Request) {
+	principal, ok := security.PrincipalFromContext(r.Context())
+	if !ok {
+		writeHTTPError(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+	var body struct {
+		DisplayName string `json:"displayName"`
+	}
+	if err := httpx.DecodeJSON(r, &body); err != nil {
+		writeHTTPError(w, r, http.StatusBadRequest, "INVALID_JSON", "Request body is invalid")
+		return
+	}
+	user, err := h.svc.UpdateProfile(
+		r.Context(), principal.OrganizationID, principal.UserID, body.DisplayName,
+	)
+	if err != nil {
+		writeAuthError(w, r, err)
+		return
+	}
+	writeHTTPJSON(w, r, http.StatusOK, user)
+}
+
+func (h *Handler) HandleChangePassword(w http.ResponseWriter, r *http.Request) {
+	principal, ok := security.PrincipalFromContext(r.Context())
+	if !ok {
+		writeHTTPError(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+	var body struct {
+		CurrentPassword string `json:"currentPassword"`
+		NewPassword     string `json:"newPassword"`
+	}
+	if err := httpx.DecodeJSON(r, &body); err != nil {
+		writeHTTPError(w, r, http.StatusBadRequest, "INVALID_JSON", "Request body is invalid")
+		return
+	}
+	if err := h.svc.ChangePassword(
+		r.Context(), principal.OrganizationID, principal.UserID,
+		body.CurrentPassword, body.NewPassword,
+	); err != nil {
+		writeAuthError(w, r, err)
+		return
+	}
+	ClearSessionCookies(w, h.secureCookies)
+	writeHTTPJSON(w, r, http.StatusOK, map[string]string{responseStatusField: "password_changed"})
+}
+
+func (h *Handler) HandleUpdatePreferences(w http.ResponseWriter, r *http.Request) {
+	principal, ok := security.PrincipalFromContext(r.Context())
+	if !ok {
+		writeHTTPError(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		return
+	}
+	var body UserPreferences
+	if err := httpx.DecodeJSON(r, &body); err != nil {
+		writeHTTPError(w, r, http.StatusBadRequest, "INVALID_JSON", "Request body is invalid")
+		return
+	}
+	preferences, err := h.svc.UpdatePreferences(
+		r.Context(), principal.OrganizationID, principal.UserID, body,
+	)
+	if err != nil {
+		writeAuthError(w, r, err)
+		return
+	}
+	writeHTTPJSON(w, r, http.StatusOK, preferences)
+}
+
 // HandleListOrganizations returns workspaces available to the authenticated user.
 func (h *Handler) HandleListOrganizations(w http.ResponseWriter, r *http.Request) {
 	principal, ok := security.PrincipalFromContext(r.Context())
