@@ -148,9 +148,9 @@ export default function MarketplacePage() {
       {message ? <p className="text-[var(--lp-success)]">{message}</p> : null}
 
       <Reveal>
-        <Surface className="overflow-hidden p-0">
+        <Surface className="overflow-hidden !p-0">
           <div className="grid lg:grid-cols-[.72fr_1.28fr]">
-            <div className="bg-[var(--lp-ink)] p-7 text-white">
+            <div className="rounded-[var(--lp-radius)] bg-[var(--lp-ink)] p-7 text-white lg:rounded-r-none">
               <p className="text-xs font-bold uppercase tracking-[.2em] text-white/60">Creator studio</p>
               <h2 className="mt-4 text-3xl font-semibold">Publish your playbook</h2>
               <p className="mt-3 leading-7 text-white/70">

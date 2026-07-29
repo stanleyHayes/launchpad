@@ -2,6 +2,7 @@ package assignments
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -172,6 +173,9 @@ func (s *Service) resolveManagerReports(
 ) (employees.Employee, []employees.Employee, error) {
 	manager, err := s.employees.GetByUserID(ctx, organizationID, managerUserID)
 	if err != nil {
+		if errors.Is(err, employees.ErrNotFound) {
+			return employees.Employee{}, []employees.Employee{}, nil
+		}
 		return employees.Employee{}, nil, fmt.Errorf("resolve employee: %w", err)
 	}
 

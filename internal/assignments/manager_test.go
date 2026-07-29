@@ -250,6 +250,36 @@ func TestTeamRollupScopesToDirectReportsAndTenant(t *testing.T) {
 	}
 }
 
+func TestManagerViewsAreEmptyWhenAccountHasNoEmployeeProfile(t *testing.T) {
+	t.Parallel()
+
+	fixture := newManagerFixture()
+	blockers := &stubBlockers{}
+	svc := assignments.NewService(
+		fixture.repo,
+		stubJourneys{},
+		fixture.employees,
+		fixture.notify,
+		blockers,
+	)
+
+	summaries, err := svc.TeamRollup(context.Background(), testOrgID, "organization-owner")
+	if err != nil {
+		t.Fatalf("TeamRollup: %v", err)
+	}
+	if len(summaries) != 0 {
+		t.Fatalf("TeamRollup = %+v, want empty for account without employee profile", summaries)
+	}
+
+	items, err := svc.ListTeamBlockers(context.Background(), testOrgID, "organization-owner")
+	if err != nil {
+		t.Fatalf("ListTeamBlockers: %v", err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("ListTeamBlockers = %+v, want empty for account without employee profile", items)
+	}
+}
+
 func TestReportBlockerCreatesTicketAndNotifiesManager(t *testing.T) {
 	t.Parallel()
 
