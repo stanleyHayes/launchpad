@@ -107,7 +107,7 @@ export default function HomePage() {
               </Link>
             </div>
             <p className="lp-rise-delay-2 mt-6 flex items-center gap-2 text-sm text-white/60">
-              <Icon name="check" className="h-4 w-4 text-[var(--lp-signal)]" />
+              <Icon name="check" className="h-4 w-4 text-white" />
               No credit card required · Set up in minutes
             </p>
             <div className="lp-rise-delay-2 mt-6 flex flex-wrap gap-2">
@@ -116,7 +116,7 @@ export default function HomePage() {
                   key={chip}
                   className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/10 px-3 py-1 text-xs font-medium text-white/85 backdrop-blur"
                 >
-                  <Icon name="check" className="h-3 w-3 text-[var(--lp-signal)]" />
+                  <Icon name="check" className="h-3 w-3 text-white" />
                   {chip}
                 </span>
               ))}
