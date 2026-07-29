@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState, useTransition, type SyntheticEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { MeResponse } from "@launchpad/api-client";
 import { ApiError } from "@launchpad/api-client";
@@ -23,6 +23,7 @@ export default function SettingsPage() {
   const [tab, setTab] = useState<TabKey>("profile");
   const [me, setMe] = useState<MeResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!getAccessToken()) {
@@ -52,6 +53,42 @@ export default function SettingsPage() {
       stale = true;
     };
   }, [router]);
+
+  function saveProfile(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const displayName = String(new FormData(event.currentTarget).get("displayName") ?? "").trim();
+    setError(null);
+    setMessage(null);
+    startTransition(() => {
+      void getClient().updateMyProfile(displayName).then((user) => {
+        setMe((current) => current ? { ...current, user } : current);
+        setMessage("Profile updated");
+      }).catch((cause: unknown) => {
+        setError(cause instanceof ApiError ? cause.message : "Unable to update profile");
+      });
+    });
+  }
+
+  function changePassword(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const currentPassword = String(form.get("currentPassword") ?? "");
+    const newPassword = String(form.get("newPassword") ?? "");
+    if (newPassword !== String(form.get("confirmPassword") ?? "")) {
+      setError("New passwords do not match");
+      return;
+    }
+    setError(null);
+    setMessage(null);
+    startTransition(() => {
+      void getClient().changeMyPassword(currentPassword, newPassword).then(() => {
+        clearSession();
+        router.replace("/login?passwordChanged=1");
+      }).catch((cause: unknown) => {
+        setError(cause instanceof ApiError ? cause.message : "Unable to change password");
+      });
+    });
+  }
 
   return (
     <div className="space-y-6">
@@ -90,10 +127,15 @@ export default function SettingsPage() {
           {error}
         </p>
       ) : null}
+      {message ? (
+        <p className="rounded-[var(--lp-radius)] bg-[var(--lp-success)]/10 px-3 py-2 text-sm text-[var(--lp-success)]">
+          {message}
+        </p>
+      ) : null}
 
       {tab === "profile" ? (
         <Reveal delay={2}>
-          <div className="max-w-3xl">
+          <div className="grid max-w-4xl gap-5 lg:grid-cols-[.72fr_1.28fr]">
             <Surface>
               <div className="flex items-center gap-4">
                 <InitialsAvatar name={me?.user.displayName ?? "?"} size={56} />
@@ -123,6 +165,38 @@ export default function SettingsPage() {
                 ))}
               </div>
             </Surface>
+            <Surface>
+              <h2 className="flex items-center gap-2 text-lg font-semibold">
+                <Icon name="user" className="h-5 w-5 text-[var(--lp-brand)]" />
+                Personal profile
+              </h2>
+              <p className="mt-1 text-sm text-[var(--lp-ink-muted)]">
+                Update the name shown in the platform console and audit activity.
+              </p>
+              <form onSubmit={saveProfile} className="mt-5 space-y-4">
+                <label className="block text-sm font-semibold">
+                  Display name
+                  <input
+                    className="lp-input mt-1.5"
+                    name="displayName"
+                    defaultValue={me?.user.displayName}
+                    minLength={2}
+                    maxLength={100}
+                    required
+                  />
+                </label>
+                <label className="block text-sm font-semibold">
+                  Sign-in email
+                  <input className="lp-input mt-1.5 opacity-70" value={me?.user.email ?? ""} disabled />
+                  <span className="mt-1 block text-xs font-normal text-[var(--lp-ink-muted)]">
+                    Sign-in email changes require another platform owner.
+                  </span>
+                </label>
+                <button className="lp-btn lp-btn--primary" disabled={pending}>
+                  {pending ? "Saving…" : "Save profile"}
+                </button>
+              </form>
+            </Surface>
           </div>
         </Reveal>
       ) : null}
@@ -148,13 +222,39 @@ export default function SettingsPage() {
 
       {tab === "security" ? (
         <Reveal delay={2}>
-          <div className="max-w-3xl">
+          <div className="grid max-w-4xl gap-5 lg:grid-cols-2">
             <MFASecurityCard
               mfaEnabled={me?.mfaEnabled ?? false}
               onChanged={(enabled) => {
                 setMe((current) => (current ? { ...current, mfaEnabled: enabled } : current));
               }}
             />
+            <Surface>
+              <h2 className="flex items-center gap-2 text-lg font-semibold">
+                <Icon name="lock" className="h-5 w-5 text-[var(--lp-brand)]" />
+                Change password
+              </h2>
+              <p className="mt-1 text-sm text-[var(--lp-ink-muted)]">
+                Changing your password signs out every active session.
+              </p>
+              <form onSubmit={changePassword} className="mt-5 space-y-4">
+                <label className="block text-sm font-semibold">
+                  Current password
+                  <input className="lp-input mt-1.5" name="currentPassword" type="password" autoComplete="current-password" required />
+                </label>
+                <label className="block text-sm font-semibold">
+                  New password
+                  <input className="lp-input mt-1.5" name="newPassword" type="password" autoComplete="new-password" minLength={10} required />
+                </label>
+                <label className="block text-sm font-semibold">
+                  Confirm new password
+                  <input className="lp-input mt-1.5" name="confirmPassword" type="password" autoComplete="new-password" minLength={10} required />
+                </label>
+                <button className="lp-btn lp-btn--primary" disabled={pending}>
+                  {pending ? "Updating…" : "Update password"}
+                </button>
+              </form>
+            </Surface>
           </div>
         </Reveal>
       ) : null}

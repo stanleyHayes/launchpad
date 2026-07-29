@@ -241,7 +241,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
           : undefined
       }
       userMenuItems={[
-        { icon: "settings", label: "Settings", caption: "Profile, appearance & channels", href: "/settings" },
+        { icon: "settings", label: "Settings", caption: "Profile, password & workspace", href: "/settings" },
         { icon: "plug", label: "Integrations", caption: "GitHub and Jira connections", href: "/integrations" },
         { icon: "users", label: "Members & roles", caption: "Team access and permissions", href: "/members" },
         { icon: "shield", label: "Custom roles", caption: "Permission sets for your team", href: "/roles" },

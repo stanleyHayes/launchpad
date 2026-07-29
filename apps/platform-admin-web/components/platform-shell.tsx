@@ -164,7 +164,7 @@ export function PlatformShell({ children }: { children: ReactNode }) {
           : undefined
       }
       userMenuItems={[
-        { icon: "settings", label: "Settings", caption: "Profile & appearance", href: "/settings" },
+        { icon: "settings", label: "Settings", caption: "Profile, password & appearance", href: "/settings" },
         { icon: "check", label: "Launch readiness", caption: "Go-live checklist", href: "/launch-readiness" },
         { icon: "clock", label: "Audit events", caption: "Console activity trail", href: "/audit-events" },
         { icon: "plug", label: "Feature flags", caption: "Toggle platform features", href: "/feature-flags" },

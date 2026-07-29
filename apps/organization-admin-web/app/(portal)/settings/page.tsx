@@ -106,6 +106,42 @@ export default function SettingsPage() {
     });
   }
 
+  function onSaveProfile(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const displayName = formString(new FormData(event.currentTarget), "displayName");
+    setError(null);
+    setMessage(null);
+    startTransition(() => {
+      void getClient().updateMyProfile(displayName).then((user) => {
+        setMe((current) => current ? { ...current, user } : current);
+        setMessage("Personal profile updated");
+      }).catch((cause: unknown) => {
+        setError(cause instanceof ApiError ? cause.message : "Unable to update profile");
+      });
+    });
+  }
+
+  function onChangePassword(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const currentPassword = formString(form, "currentPassword");
+    const newPassword = formString(form, "newPassword");
+    if (newPassword !== formString(form, "confirmPassword")) {
+      setError("New passwords do not match");
+      return;
+    }
+    setError(null);
+    setMessage(null);
+    startTransition(() => {
+      void getClient().changeMyPassword(currentPassword, newPassword).then(() => {
+        clearSession();
+        router.replace("/login?passwordChanged=1");
+      }).catch((cause: unknown) => {
+        setError(cause instanceof ApiError ? cause.message : "Unable to change password");
+      });
+    });
+  }
+
   function onSaveChannels(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
@@ -205,6 +241,29 @@ export default function SettingsPage() {
                   </div>
                 ))}
               </div>
+            </Surface>
+
+            <Surface>
+              <h2 className="flex items-center gap-2 text-sm font-bold">
+                <Icon name="user" className="h-4 w-4 text-[var(--lp-brand)]" />
+                Personal profile
+              </h2>
+              <p className="mt-1 text-xs text-[var(--lp-ink-muted)]">
+                This is your personal account name, separate from the organization name.
+              </p>
+              <form onSubmit={onSaveProfile} className="mt-4 space-y-4">
+                <label className="block text-sm font-medium">
+                  Display name
+                  <input className="lp-input mt-1.5" name="displayName" defaultValue={me?.user.displayName} minLength={2} maxLength={100} required />
+                </label>
+                <label className="block text-sm font-medium">
+                  Sign-in email
+                  <input className="lp-input mt-1.5 opacity-70" value={me?.user.email ?? ""} disabled />
+                </label>
+                <button type="submit" disabled={pending} className="lp-btn lp-btn--primary">
+                  {pending ? "Saving…" : "Save personal profile"}
+                </button>
+              </form>
             </Surface>
 
             <Surface>
@@ -327,13 +386,39 @@ export default function SettingsPage() {
 
       {tab === "security" ? (
         <Reveal delay={2}>
-          <div className="max-w-3xl">
+          <div className="grid max-w-4xl gap-5 lg:grid-cols-2">
             <MFASecurityCard
               mfaEnabled={me?.mfaEnabled ?? false}
               onChanged={(enabled) => {
                 setMe((current) => (current ? { ...current, mfaEnabled: enabled } : current));
               }}
             />
+            <Surface>
+              <h2 className="flex items-center gap-2 text-lg font-semibold">
+                <Icon name="lock" className="h-5 w-5 text-[var(--lp-brand)]" />
+                Change password
+              </h2>
+              <p className="mt-1 text-sm text-[var(--lp-ink-muted)]">
+                Changing your password signs out every active session.
+              </p>
+              <form onSubmit={onChangePassword} className="mt-5 space-y-4">
+                <label className="block text-sm font-semibold">
+                  Current password
+                  <input className="lp-input mt-1.5" name="currentPassword" type="password" autoComplete="current-password" required />
+                </label>
+                <label className="block text-sm font-semibold">
+                  New password
+                  <input className="lp-input mt-1.5" name="newPassword" type="password" autoComplete="new-password" minLength={10} required />
+                </label>
+                <label className="block text-sm font-semibold">
+                  Confirm new password
+                  <input className="lp-input mt-1.5" name="confirmPassword" type="password" autoComplete="new-password" minLength={10} required />
+                </label>
+                <button type="submit" disabled={pending} className="lp-btn lp-btn--primary">
+                  {pending ? "Updating…" : "Update password"}
+                </button>
+              </form>
+            </Surface>
           </div>
         </Reveal>
       ) : null}
